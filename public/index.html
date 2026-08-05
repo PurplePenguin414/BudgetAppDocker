@@ -93,6 +93,21 @@
   .chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; }
   .cat-select { margin-bottom: 12px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 12.5px; font-family: inherit; background: var(--surface); }
 
+  /* ---------- 50/30/20 rule card ---------- */
+  .rule-row { margin-bottom: 16px; }
+  .rule-row:last-child { margin-bottom: 0; }
+  .rule-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .rule-name { font-size: 13.5px; font-weight: 500; }
+  .rule-target { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .rule-track { background: var(--surface2); border-radius: 4px; height: 10px; overflow: hidden; position: relative; }
+  .rule-fill { height: 10px; border-radius: 4px; }
+  .rule-marker { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); opacity: 0.35; }
+  .rule-meta { display: flex; justify-content: space-between; margin-top: 5px; font-size: 11.5px; font-family: 'DM Mono', monospace; color: var(--muted); }
+
+  .bucket-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .bucket-row:last-child { border-bottom: none; }
+  .bucket-row select { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-family: inherit; background: var(--surface); }
+
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 620px) {
     .metrics { grid-template-columns: repeat(2,1fr); }
@@ -134,8 +149,18 @@
     <div class="metric"><div class="metric-label">savings rate</div><div class="metric-value" id="m-rate">0%</div></div>
   </div>
 
+  <div class="section-label">50 / 30 / 20 breakdown</div>
+  <div class="card" id="rule-card"></div>
+  <span class="add-cat-link" id="manage-buckets-link">manage which categories count as needs / wants / savings</span>
+  <div class="card" id="bucket-manager" style="display:none; margin-top:10px;"></div>
+
   <div class="section-label">Where this month's money went</div>
-  <div class="card" id="expense-bars"><div class="empty-msg">No expenses logged yet for this month.</div></div>
+  <div class="two-col">
+    <div class="card" id="expense-bars"><div class="empty-msg">No expenses logged yet for this month.</div></div>
+    <div class="card">
+      <canvas id="expense-pie" height="220"></canvas>
+    </div>
+  </div>
 
   <div class="section-label">Add an entry</div>
   <div class="card">
