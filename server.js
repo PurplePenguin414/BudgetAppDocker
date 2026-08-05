@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS categories (
   name TEXT NOT NULL,
   is_default INTEGER NOT NULL DEFAULT 0,
   sort_order INTEGER NOT NULL DEFAULT 0,
+  budget_bucket TEXT CHECK(budget_bucket IN ('needs','wants','savings') OR budget_bucket IS NULL),
   UNIQUE(kind, name)
 );
 
@@ -39,11 +40,17 @@ CREATE TABLE IF NOT EXISTS entries (
 );
 `);
 
+// ---------- Migration: add budget_bucket to existing installs ----------
+const existingCols = db.prepare("PRAGMA table_info(categories)").all().map((c) => c.name);
+if (!existingCols.includes('budget_bucket')) {
+  db.exec('ALTER TABLE categories ADD COLUMN budget_bucket TEXT');
+}
+
 // ---------- Seed default categories (only if table is empty) ----------
 const catCount = db.prepare('SELECT COUNT(*) AS c FROM categories').get().c;
 if (catCount === 0) {
   const insertCat = db.prepare(
-    'INSERT INTO categories (kind, name, is_default, sort_order) VALUES (?, ?, 1, ?)'
+    'INSERT INTO categories (kind, name, is_default, sort_order, budget_bucket) VALUES (?, ?, 1, ?, ?)'
   );
   const incomeDefaults = [
     'Taz Networks',
@@ -52,28 +59,69 @@ if (catCount === 0) {
     'The Book Bridge Organization',
     'Other'
   ];
+  // [name, bucket] — bucket is null for categories excluded from 50/30/20 (e.g. business costs)
   const expenseDefaults = [
-    'Rent',
-    'Debt program',
-    'Utilities',
-    'Groceries',
-    'Fast food',
-    'Gas / auto',
-    'ATM / cash',
-    'Shopping',
-    'Subscriptions',
-    'Pets',
-    'Health / pharmacy',
-    'Health / gym',
-    'Business expense',
-    'Gaming',
-    'Other'
+    ['Rent', 'needs'],
+    ['Debt program', 'needs'],
+    ['Utilities', 'needs'],
+    ['Groceries', 'needs'],
+    ['Fast food', 'wants'],
+    ['Gas / auto', 'needs'],
+    ['ATM / cash', 'wants'],
+    ['Shopping', 'wants'],
+    ['Subscriptions', 'wants'],
+    ['Pets', 'needs'],
+    ['Health', 'needs'],
+    ['Business expense', null],
+    ['Gaming', 'wants'],
+    ['Savings / Investing', 'savings'],
+    ['Other', 'wants']
   ];
   const seed = db.transaction(() => {
-    incomeDefaults.forEach((name, i) => insertCat.run('income', name, i));
-    expenseDefaults.forEach((name, i) => insertCat.run('expense', name, i));
+    incomeDefaults.forEach((name, i) => insertCat.run('income', name, i, null));
+    expenseDefaults.forEach(([name, bucket], i) => insertCat.run('expense', name, i, bucket));
   });
   seed();
+}
+
+// ---------- Migration: assign buckets / add Savings category for pre-existing installs ----------
+const bucketDefaults = {
+  'Rent': 'needs',
+  'Debt program': 'needs',
+  'Utilities': 'needs',
+  'Groceries': 'needs',
+  'Fast food': 'wants',
+  'Gas / auto': 'needs',
+  'ATM / cash': 'wants',
+  'Shopping': 'wants',
+  'Subscriptions': 'wants',
+  'Pets': 'needs',
+  'Health': 'needs',
+  'Health / pharmacy': 'needs',
+  'Health / gym': 'needs',
+  'Business expense': null,
+  'Gaming': 'wants',
+  'Other': 'wants'
+};
+const setBucket = db.prepare(
+  "UPDATE categories SET budget_bucket = ? WHERE kind = 'expense' AND name = ? AND budget_bucket IS NULL"
+);
+const bucketMigration = db.transaction(() => {
+  Object.entries(bucketDefaults).forEach(([name, bucket]) => {
+    if (bucket !== null) setBucket.run(bucket, name);
+  });
+});
+bucketMigration();
+
+const hasSavingsCat = db
+  .prepare("SELECT id FROM categories WHERE kind = 'expense' AND name = 'Savings / Investing'")
+  .get();
+if (!hasSavingsCat) {
+  const maxOrder =
+    db.prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories WHERE kind = 'expense'").get().m;
+  db.prepare(
+    "INSERT INTO categories (kind, name, is_default, sort_order, budget_bucket) VALUES ('expense', 'Savings / Investing', 1, ?, 'savings')"
+  ).run(maxOrder + 1);
 }
 
 // ---------- App setup ----------
@@ -124,17 +172,19 @@ app.get('/api/categories', requireAuth, (req, res) => {
 });
 
 app.post('/api/categories', requireAuth, (req, res) => {
-  const { kind, name } = req.body;
+  const { kind, name, bucket } = req.body;
   if (!['income', 'expense'].includes(kind) || !name || !name.trim()) {
     return res.status(400).json({ error: 'kind must be income/expense and name required' });
   }
+  const validBuckets = ['needs', 'wants', 'savings', null];
+  const useBucket = kind === 'expense' ? (validBuckets.includes(bucket) ? bucket : 'wants') : null;
   try {
     const maxOrder =
       db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories WHERE kind = ?').get(kind).m;
     const info = db
-      .prepare('INSERT INTO categories (kind, name, is_default, sort_order) VALUES (?, ?, 0, ?)')
-      .run(kind, name.trim(), maxOrder + 1);
-    res.json({ id: info.lastInsertRowid, kind, name: name.trim() });
+      .prepare('INSERT INTO categories (kind, name, is_default, sort_order, budget_bucket) VALUES (?, ?, 0, ?, ?)')
+      .run(kind, name.trim(), maxOrder + 1, useBucket);
+    res.json({ id: info.lastInsertRowid, kind, name: name.trim(), budget_bucket: useBucket });
   } catch (e) {
     if (e.message.includes('UNIQUE')) {
       return res.status(409).json({ error: 'Category already exists' });
@@ -143,12 +193,21 @@ app.post('/api/categories', requireAuth, (req, res) => {
   }
 });
 
+app.patch('/api/categories/:id/bucket', requireAuth, (req, res) => {
+  const { bucket } = req.body;
+  if (!['needs', 'wants', 'savings', null].includes(bucket)) {
+    return res.status(400).json({ error: 'bucket must be needs, wants, savings, or null' });
+  }
+  db.prepare('UPDATE categories SET budget_bucket = ? WHERE id = ?').run(bucket, req.params.id);
+  res.json({ ok: true });
+});
+
 // ---------- Entry routes ----------
 app.get('/api/month/:year/:month', requireAuth, (req, res) => {
   const { year, month } = req.params;
   const entries = db
     .prepare(
-      `SELECT e.id, e.amount, e.note, c.id AS category_id, c.name AS category_name, c.kind
+      `SELECT e.id, e.amount, e.note, c.id AS category_id, c.name AS category_name, c.kind, c.budget_bucket
        FROM entries e JOIN categories c ON c.id = e.category_id
        WHERE e.year = ? AND e.month = ?
        ORDER BY c.kind, c.sort_order`
