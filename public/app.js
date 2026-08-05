@@ -4,8 +4,11 @@ const state = {
   kind: 'expense',
   categories: { income: [], expense: [] },
   trendChart: null,
-  categoryChart: null
+  categoryChart: null,
+  pieChart: null
 };
+
+const PIE_COLORS = ['#2761a0','#c94235','#2a8a5f','#b87318','#7a5ea8','#c9598a','#4a9d9c','#9a8a3a','#a05e27','#6a7a3a','#8a6a8a','#3a6a8a','#a03a3a','#6a8a5a'];
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const fmt = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -90,10 +93,21 @@ function populateCategorySelect() {
 document.getElementById('add-cat-link').addEventListener('click', async () => {
   const name = prompt(`New ${state.kind} category name:`);
   if (!name || !name.trim()) return;
+
+  let bucket = null;
+  if (state.kind === 'expense') {
+    const input = prompt('Which bucket? Type: needs, wants, or savings', 'wants');
+    if (input && ['needs', 'wants', 'savings'].includes(input.trim().toLowerCase())) {
+      bucket = input.trim().toLowerCase();
+    } else {
+      bucket = 'wants';
+    }
+  }
+
   const res = await fetch('/api/categories', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind: state.kind, name: name.trim() })
+    body: JSON.stringify({ kind: state.kind, name: name.trim(), bucket })
   });
   if (res.ok) {
     await loadCategories();
@@ -155,6 +169,8 @@ function renderSnapshot(entries) {
   rateEl.textContent = rate + '%';
   rateEl.className = 'metric-value ' + (rate >= 10 ? 'v-green' : rate >= 0 ? 'v-amber' : 'v-red');
 
+  renderRuleCard(entries, income);
+
   // Category bars (expenses only)
   const byCat = {};
   entries.filter((e) => e.kind === 'expense').forEach((e) => {
@@ -177,6 +193,126 @@ function renderSnapshot(entries) {
     </div>`
     )
     .join('');
+
+  renderExpensePie(sorted);
+}
+
+function renderExpensePie(sorted) {
+  const canvas = document.getElementById('expense-pie');
+  if (sorted.length === 0) {
+    if (state.pieChart) { state.pieChart.destroy(); state.pieChart = null; }
+    return;
+  }
+  const ctx = canvas.getContext('2d');
+  if (state.pieChart) state.pieChart.destroy();
+  state.pieChart = new Chart(ctx, {
+    type: 'pie',
+    data: {
+      labels: sorted.map(([name]) => name),
+      datasets: [{
+        data: sorted.map(([, amt]) => amt),
+        backgroundColor: sorted.map((_, i) => PIE_COLORS[i % PIE_COLORS.length])
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'right', labels: { boxWidth: 12, font: { family: 'DM Sans', size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.label}: ${fmt(ctx.raw)}`
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderRuleCard(entries, income) {
+  const container = document.getElementById('rule-card');
+  const expenseEntries = entries.filter((e) => e.kind === 'expense');
+  const totals = { needs: 0, wants: 0, savings: 0 };
+  expenseEntries.forEach((e) => {
+    if (e.budget_bucket && totals.hasOwnProperty(e.budget_bucket)) {
+      totals[e.budget_bucket] += e.amount;
+    }
+  });
+
+  if (income <= 0) {
+    container.innerHTML = '<div class="empty-msg">Log income for this month to see your 50/30/20 breakdown.</div>';
+    return;
+  }
+
+  const buckets = [
+    { key: 'needs', label: 'Needs', target: 50, color: '#2761a0' },
+    { key: 'wants', label: 'Wants', target: 30, color: '#b87318' },
+    { key: 'savings', label: 'Savings / investing', target: 20, color: '#2a8a5f' }
+  ];
+
+  container.innerHTML = buckets
+    .map((b) => {
+      const amt = totals[b.key];
+      const pct = (amt / income) * 100;
+      const barWidth = Math.min(pct, 100);
+      const overTarget = pct > b.target + 2; // small tolerance
+      const under = b.key === 'savings' && pct < b.target - 2;
+      const color = overTarget || under ? '#c94235' : b.color;
+      return `
+      <div class="rule-row">
+        <div class="rule-top">
+          <span class="rule-name">${b.label}</span>
+          <span class="rule-target">target ${b.target}%</span>
+        </div>
+        <div class="rule-track">
+          <div class="rule-fill" style="width:${barWidth}%;background:${color}"></div>
+          <div class="rule-marker" style="left:${b.target}%"></div>
+        </div>
+        <div class="rule-meta">
+          <span>${fmt(amt)}</span>
+          <span>${pct.toFixed(1)}% of income</span>
+        </div>
+      </div>`;
+    })
+    .join('');
+}
+
+// ---------- Bucket manager ----------
+document.getElementById('manage-buckets-link').addEventListener('click', () => {
+  const panel = document.getElementById('bucket-manager');
+  const isHidden = panel.style.display === 'none';
+  panel.style.display = isHidden ? 'block' : 'none';
+  if (isHidden) renderBucketManager();
+});
+
+function renderBucketManager() {
+  const panel = document.getElementById('bucket-manager');
+  const cats = state.categories.expense;
+  panel.innerHTML = cats
+    .map(
+      (c) => `
+    <div class="bucket-row">
+      <span>${c.name}</span>
+      <select data-id="${c.id}">
+        <option value="needs" ${c.budget_bucket === 'needs' ? 'selected' : ''}>Needs</option>
+        <option value="wants" ${c.budget_bucket === 'wants' ? 'selected' : ''}>Wants</option>
+        <option value="savings" ${c.budget_bucket === 'savings' ? 'selected' : ''}>Savings</option>
+        <option value="" ${!c.budget_bucket ? 'selected' : ''}>Excluded</option>
+      </select>
+    </div>`
+    )
+    .join('');
+
+  panel.querySelectorAll('select').forEach((sel) => {
+    sel.addEventListener('change', async () => {
+      await fetch(`/api/categories/${sel.dataset.id}/bucket`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bucket: sel.value || null })
+      });
+      await loadCategories();
+      refreshMonth();
+    });
+  });
 }
 
 function renderEntryList(entries) {
@@ -224,7 +360,6 @@ function renderTrendChart(months) {
   const labels = months.map((m) => `${MONTH_NAMES[m.month - 1].slice(0, 3)} ${String(m.year).slice(2)}`);
   const income = months.map((m) => m.income || 0);
   const expense = months.map((m) => m.expense || 0);
-  const net = months.map((m) => (m.income || 0) - (m.expense || 0));
 
   const ctx = document.getElementById('trend-chart').getContext('2d');
   if (state.trendChart) state.trendChart.destroy();
@@ -233,9 +368,22 @@ function renderTrendChart(months) {
     data: {
       labels,
       datasets: [
-        { label: 'Income', data: income, borderColor: '#2a8a5f', backgroundColor: 'transparent', tension: 0.25 },
-        { label: 'Expenses', data: expense, borderColor: '#c94235', backgroundColor: 'transparent', tension: 0.25 },
-        { label: 'Net', data: net, borderColor: '#2761a0', backgroundColor: 'transparent', borderDash: [4, 3], tension: 0.25 }
+        {
+          label: 'Income',
+          data: income,
+          borderColor: '#2a8a5f',
+          backgroundColor: 'rgba(42,138,95,0.18)',
+          fill: true,
+          tension: 0.25
+        },
+        {
+          label: 'Expenses',
+          data: expense,
+          borderColor: '#c94235',
+          backgroundColor: 'rgba(201,66,53,0.18)',
+          fill: true,
+          tension: 0.25
+        }
       ]
     },
     options: {
