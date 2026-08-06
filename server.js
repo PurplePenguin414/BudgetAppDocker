@@ -277,6 +277,65 @@ app.get('/api/trends', requireAuth, (req, res) => {
   });
 });
 
+// ---------- Averages ----------
+app.get('/api/averages', requireAuth, (req, res) => {
+  const monthRows = db
+    .prepare('SELECT DISTINCT year, month FROM entries')
+    .all();
+  const monthCount = monthRows.length;
+
+  if (monthCount === 0) {
+    return res.json({
+      monthCount: 0,
+      income: [],
+      expense: [],
+      totals: { avgIncome: 0, avgExpense: 0, avgNet: 0 },
+      bucketAverages: { needs: 0, wants: 0, savings: 0 }
+    });
+  }
+
+  const catTotals = db
+    .prepare(
+      `SELECT c.id, c.name, c.kind, c.budget_bucket, SUM(e.amount) AS total
+       FROM entries e JOIN categories c ON c.id = e.category_id
+       GROUP BY c.id, c.name, c.kind, c.budget_bucket
+       ORDER BY c.kind, total DESC`
+    )
+    .all();
+
+  const income = [];
+  const expense = [];
+  const bucketAverages = { needs: 0, wants: 0, savings: 0 };
+  let totalIncome = 0;
+  let totalExpense = 0;
+
+  catTotals.forEach((r) => {
+    const avg = r.total / monthCount;
+    if (r.kind === 'income') {
+      income.push({ category: r.name, avg });
+      totalIncome += r.total;
+    } else {
+      expense.push({ category: r.name, avg, bucket: r.budget_bucket });
+      totalExpense += r.total;
+      if (r.budget_bucket && bucketAverages.hasOwnProperty(r.budget_bucket)) {
+        bucketAverages[r.budget_bucket] += avg;
+      }
+    }
+  });
+
+  res.json({
+    monthCount,
+    income,
+    expense,
+    totals: {
+      avgIncome: totalIncome / monthCount,
+      avgExpense: totalExpense / monthCount,
+      avgNet: (totalIncome - totalExpense) / monthCount
+    },
+    bucketAverages
+  });
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.listen(PORT, () => {
