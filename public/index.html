@@ -41,6 +41,8 @@
   .header h1 { font-size: 22px; letter-spacing: -0.4px; }
   .header p { font-size: 12px; color: var(--muted); margin-top: 4px; font-family: 'DM Mono', monospace; }
   #logout-btn { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+  .nav-link { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text); text-decoration: none; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin-right: 8px; display: inline-block; background: var(--surface); }
+  .nav-link:hover { background: var(--surface2); }
 
   /* ---------- Month nav ---------- */
   .month-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
@@ -132,7 +134,10 @@
       <h1>Megan's Budget Dashboard</h1>
       <p>Monthly income &amp; spending — tracked over time</p>
     </div>
-    <button id="logout-btn">Log out</button>
+    <div>
+      <a href="averages.html" class="nav-link">Averages</a>
+      <button id="logout-btn">Log out</button>
+    </div>
   </div>
 
   <div class="month-nav">
