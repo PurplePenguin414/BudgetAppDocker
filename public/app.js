@@ -193,7 +193,7 @@ function renderSnapshot(entries) {
   }
   const max = sorted[0][1];
   const total = sorted.reduce((s, [, amt]) => s + amt, 0);
-  container.innerHTML = sorted
+  const rowsHtml = sorted
     .map(
       ([name, amt]) => `
     <div class="bar-row">
@@ -203,6 +203,13 @@ function renderSnapshot(entries) {
     </div>`
     )
     .join('');
+  const totalHtml = `
+    <div class="bar-row" style="border-top:1.5px solid var(--border); padding-top:12px; margin-top:4px;">
+      <div class="bar-label" style="font-weight:600;">Total</div>
+      <div class="bar-track" style="visibility:hidden;"></div>
+      <div class="bar-amt" style="font-weight:600;">${fmt(total)}</div>
+    </div>`;
+  container.innerHTML = rowsHtml + totalHtml;
 
   renderExpensePie(sorted);
 }

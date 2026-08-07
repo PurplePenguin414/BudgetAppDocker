@@ -120,7 +120,7 @@ function renderIncomeBars(income) {
   }
   const max = sorted[0].avg;
   const total = sorted.reduce((s, e) => s + e.avg, 0);
-  container.innerHTML = sorted
+  const rowsHtml = sorted
     .map(
       (e) => `
     <div class="bar-row">
@@ -130,6 +130,13 @@ function renderIncomeBars(income) {
     </div>`
     )
     .join('');
+  const totalHtml = `
+    <div class="bar-row" style="border-top:1.5px solid var(--border); padding-top:12px; margin-top:4px;">
+      <div class="bar-label" style="font-weight:600;">Total</div>
+      <div class="bar-track" style="visibility:hidden;"></div>
+      <div class="bar-amt" style="font-weight:600;">${fmt(total)}</div>
+    </div>`;
+  container.innerHTML = rowsHtml + totalHtml;
 }
 
 let pieChart = null;
