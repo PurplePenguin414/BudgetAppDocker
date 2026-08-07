@@ -66,6 +66,11 @@ CREATE TABLE IF NOT EXISTS targets (
   UNIQUE(category_id, year, month)
 );
 
+CREATE TABLE IF NOT EXISTS category_goals (
+  category_id INTEGER PRIMARY KEY REFERENCES categories(id),
+  amount REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS dedicated_account_balances (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   year INTEGER NOT NULL,
@@ -633,6 +638,32 @@ app.post('/api/targets', requireAuth, (req, res) => {
     `INSERT INTO targets (category_id, year, month, amount) VALUES (?, ?, ?, ?)
      ON CONFLICT(category_id, year, month) DO UPDATE SET amount = excluded.amount`
   ).run(category_id, year, month, amount);
+  res.json({ ok: true });
+});
+
+// ---------- Category goals (blanket, non-monthly — used on Averages page) ----------
+app.get('/api/goals', requireAuth, (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT c.id AS category_id, c.name AS category_name, g.amount
+       FROM categories c
+       LEFT JOIN category_goals g ON g.category_id = c.id
+       WHERE c.kind = 'expense'
+       ORDER BY c.sort_order, c.name`
+    )
+    .all();
+  res.json({ goals: rows });
+});
+
+app.post('/api/goals', requireAuth, (req, res) => {
+  const { category_id, amount } = req.body;
+  if (!category_id || amount === undefined || amount === null) {
+    return res.status(400).json({ error: 'category_id and amount are required' });
+  }
+  db.prepare(
+    `INSERT INTO category_goals (category_id, amount) VALUES (?, ?)
+     ON CONFLICT(category_id) DO UPDATE SET amount = excluded.amount`
+  ).run(category_id, amount);
   res.json({ ok: true });
 });
 
