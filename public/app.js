@@ -375,7 +375,15 @@ async function renderTargets(entries) {
     return;
   }
 
-  container.innerHTML = data.targets
+  let totalTarget = 0;
+  let totalActual = 0;
+  data.targets.forEach((t) => {
+    if (t.amount) totalTarget += t.amount;
+    totalActual += actuals[t.category_id] || 0;
+  });
+  const totalOver = totalTarget > 0 && totalActual > totalTarget;
+
+  const rowsHtml = data.targets
     .map((t) => {
       const actual = actuals[t.category_id] || 0;
       const target = t.amount;
@@ -394,6 +402,16 @@ async function renderTargets(entries) {
       </div>`;
     })
     .join('');
+
+  const totalHtml = `
+    <div class="target-row" style="border-bottom:none; padding-top:12px; margin-top:4px; border-top:1.5px solid var(--border);">
+      <div class="target-name" style="font-weight:600;">Total</div>
+      <div class="target-track" style="visibility:hidden;"></div>
+      <div class="target-actual" style="font-weight:600; color:${totalOver ? 'var(--red)' : 'var(--text)'}">${fmt(totalActual)}</div>
+      <div class="target-input-wrap"><span>of ${fmt(totalTarget)}</span></div>
+    </div>`;
+
+  container.innerHTML = rowsHtml + totalHtml;
 
   container.querySelectorAll('.target-input-wrap input').forEach((input) => {
     input.addEventListener('change', async () => {
