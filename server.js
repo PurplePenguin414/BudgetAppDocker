@@ -38,6 +38,60 @@ CREATE TABLE IF NOT EXISTS entries (
   note TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS debts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  is_default INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS debt_balances (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  debt_id INTEGER NOT NULL REFERENCES debts(id),
+  year INTEGER NOT NULL,
+  month INTEGER NOT NULL,
+  balance REAL NOT NULL,
+  note TEXT,
+  UNIQUE(debt_id, year, month)
+);
+
+CREATE TABLE IF NOT EXISTS targets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  category_id INTEGER NOT NULL REFERENCES categories(id),
+  year INTEGER NOT NULL,
+  month INTEGER NOT NULL,
+  amount REAL NOT NULL,
+  UNIQUE(category_id, year, month)
+);
+
+CREATE TABLE IF NOT EXISTS dedicated_account_balances (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  year INTEGER NOT NULL,
+  month INTEGER NOT NULL,
+  expected REAL,
+  actual REAL,
+  UNIQUE(year, month)
+);
+
+CREATE TABLE IF NOT EXISTS dedicated_account_withdrawals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  year INTEGER NOT NULL,
+  month INTEGER NOT NULL,
+  amount REAL NOT NULL,
+  note TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS dedicated_account_deposits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  year INTEGER NOT NULL,
+  month INTEGER NOT NULL,
+  amount REAL NOT NULL,
+  note TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // ---------- Migration: add budget_bucket to existing installs ----------
@@ -82,6 +136,19 @@ if (catCount === 0) {
     expenseDefaults.forEach(([name, bucket], i) => insertCat.run('expense', name, i, bucket));
   });
   seed();
+}
+
+// ---------- Seed default debts (only if table is empty) ----------
+const debtCount = db.prepare('SELECT COUNT(*) AS c FROM debts').get().c;
+if (debtCount === 0) {
+  const insertDebt = db.prepare(
+    'INSERT INTO debts (name, is_default, sort_order) VALUES (?, 1, ?)'
+  );
+  const debtDefaults = ['PNC (BeyondFinance)', 'Discover (BeyondFinance)', 'Capital One'];
+  const seedDebts = db.transaction(() => {
+    debtDefaults.forEach((name, i) => insertDebt.run(name, i));
+  });
+  seedDebts();
 }
 
 // ---------- Migration: assign buckets / add Savings category for pre-existing installs ----------
@@ -339,6 +406,276 @@ app.get('/api/averages', requireAuth, (req, res) => {
     },
     bucketAverages
   });
+});
+
+// ---------- Debt tracker ----------
+app.get('/api/debts', requireAuth, (req, res) => {
+  const debts = db.prepare('SELECT * FROM debts ORDER BY sort_order, name').all();
+  res.json({ debts });
+});
+
+app.post('/api/debts', requireAuth, (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
+  try {
+    const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM debts').get().m;
+    const info = db
+      .prepare('INSERT INTO debts (name, is_default, sort_order) VALUES (?, 0, ?)')
+      .run(name.trim(), maxOrder + 1);
+    res.json({ id: info.lastInsertRowid, name: name.trim() });
+  } catch (e) {
+    if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'Debt already exists' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/debts/balances/:year/:month', requireAuth, (req, res) => {
+  const { year, month } = req.params;
+  const rows = db
+    .prepare(
+      `SELECT d.id AS debt_id, d.name, b.balance, b.note
+       FROM debts d
+       LEFT JOIN debt_balances b ON b.debt_id = d.id AND b.year = ? AND b.month = ?
+       ORDER BY d.sort_order, d.name`
+    )
+    .all(year, month);
+  res.json({ debts: rows });
+});
+
+app.post('/api/debts/balance', requireAuth, (req, res) => {
+  const { debt_id, year, month, balance, note } = req.body;
+  if (!debt_id || !year || !month || balance === undefined || balance === null) {
+    return res.status(400).json({ error: 'debt_id, year, month, balance are required' });
+  }
+  db.prepare(
+    `INSERT INTO debt_balances (debt_id, year, month, balance, note) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(debt_id, year, month) DO UPDATE SET balance = excluded.balance, note = excluded.note`
+  ).run(debt_id, year, month, balance, note || null);
+  res.json({ ok: true });
+});
+
+app.get('/api/debts/trend', requireAuth, (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT d.name, b.year, b.month, b.balance
+       FROM debt_balances b JOIN debts d ON d.id = b.debt_id
+       ORDER BY b.year, b.month`
+    )
+    .all();
+
+  const byMonth = {};
+  const byDebt = {};
+  rows.forEach((r) => {
+    const key = `${r.year}-${String(r.month).padStart(2, '0')}`;
+    if (!byMonth[key]) byMonth[key] = { key, total: 0 };
+    byMonth[key].total += r.balance;
+    if (!byDebt[r.name]) byDebt[r.name] = {};
+    byDebt[r.name][key] = r.balance;
+  });
+
+  res.json({
+    months: Object.keys(byMonth).sort().map((k) => byMonth[k]),
+    byDebt
+  });
+});
+
+// ---------- Dedicated account (BeyondFinance settlement fund) ----------
+// "Expected" balance is auto-calculated: cumulative deposits minus cumulative withdrawals,
+// up through and including the selected month. "Actual" is what Megan manually logs each month
+// after checking the real account, so she can see if they've drifted apart.
+
+function cumulativeThrough(table, year, month) {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(amount), 0) AS total FROM ${table}
+       WHERE year < ? OR (year = ? AND month <= ?)`
+    )
+    .get(year, year, month);
+  return row.total;
+}
+
+app.get('/api/dedicated/:year/:month', requireAuth, (req, res) => {
+  const { year, month } = req.params;
+  const balance = db
+    .prepare('SELECT actual FROM dedicated_account_balances WHERE year = ? AND month = ?')
+    .get(year, month);
+  const deposits = db
+    .prepare('SELECT id, amount, note, created_at FROM dedicated_account_deposits WHERE year = ? AND month = ? ORDER BY created_at')
+    .all(year, month);
+  const withdrawals = db
+    .prepare('SELECT id, amount, note, created_at FROM dedicated_account_withdrawals WHERE year = ? AND month = ? ORDER BY created_at')
+    .all(year, month);
+
+  const depositTotal = cumulativeThrough('dedicated_account_deposits', year, month);
+  const withdrawalTotal = cumulativeThrough('dedicated_account_withdrawals', year, month);
+
+  res.json({
+    actual: balance ? balance.actual : null,
+    expectedCumulative: depositTotal - withdrawalTotal,
+    deposits,
+    withdrawals
+  });
+});
+
+app.post('/api/dedicated/balance', requireAuth, (req, res) => {
+  const { year, month, actual } = req.body;
+  if (!year || !month) return res.status(400).json({ error: 'year and month are required' });
+  db.prepare(
+    `INSERT INTO dedicated_account_balances (year, month, actual) VALUES (?, ?, ?)
+     ON CONFLICT(year, month) DO UPDATE SET actual = excluded.actual`
+  ).run(year, month, actual ?? null);
+  res.json({ ok: true });
+});
+
+app.post('/api/dedicated/deposit', requireAuth, (req, res) => {
+  const { year, month, amount, note } = req.body;
+  if (!year || !month || amount === undefined || amount === null) {
+    return res.status(400).json({ error: 'year, month, amount are required' });
+  }
+  const info = db
+    .prepare('INSERT INTO dedicated_account_deposits (year, month, amount, note) VALUES (?, ?, ?, ?)')
+    .run(year, month, amount, note || null);
+  res.json({ id: info.lastInsertRowid });
+});
+
+app.delete('/api/dedicated/deposit/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM dedicated_account_deposits WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.post('/api/dedicated/withdrawal', requireAuth, (req, res) => {
+  const { year, month, amount, note } = req.body;
+  if (!year || !month || amount === undefined || amount === null) {
+    return res.status(400).json({ error: 'year, month, amount are required' });
+  }
+  const info = db
+    .prepare('INSERT INTO dedicated_account_withdrawals (year, month, amount, note) VALUES (?, ?, ?, ?)')
+    .run(year, month, amount, note || null);
+  res.json({ id: info.lastInsertRowid });
+});
+
+app.delete('/api/dedicated/withdrawal/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM dedicated_account_withdrawals WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.get('/api/dedicated/trend', requireAuth, (req, res) => {
+  const balanceRows = db.prepare('SELECT year, month, actual FROM dedicated_account_balances').all();
+  const depositRows = db.prepare('SELECT year, month, amount FROM dedicated_account_deposits').all();
+  const withdrawalRows = db.prepare('SELECT year, month, amount FROM dedicated_account_withdrawals').all();
+
+  const keyOf = (y, m) => `${y}-${String(m).padStart(2, '0')}`;
+  const allKeys = new Set();
+  balanceRows.forEach((r) => allKeys.add(keyOf(r.year, r.month)));
+  depositRows.forEach((r) => allKeys.add(keyOf(r.year, r.month)));
+  withdrawalRows.forEach((r) => allKeys.add(keyOf(r.year, r.month)));
+
+  const sortedKeys = Array.from(allKeys).sort();
+  const actualByKey = {};
+  balanceRows.forEach((r) => { actualByKey[keyOf(r.year, r.month)] = r.actual; });
+
+  const months = sortedKeys.map((key) => {
+    const [y, m] = key.split('-').map(Number);
+    const depositTotal = cumulativeThrough('dedicated_account_deposits', y, m);
+    const withdrawalTotal = cumulativeThrough('dedicated_account_withdrawals', y, m);
+    return {
+      key,
+      expected: depositTotal - withdrawalTotal,
+      actual: actualByKey[key] !== undefined ? actualByKey[key] : null
+    };
+  });
+
+  res.json({ months });
+});
+
+// ---------- Budget targets ----------
+app.get('/api/targets/:year/:month', requireAuth, (req, res) => {
+  const { year, month } = req.params;
+  const rows = db
+    .prepare(
+      `SELECT c.id AS category_id, c.name AS category_name, t.amount
+       FROM categories c
+       LEFT JOIN targets t ON t.category_id = c.id AND t.year = ? AND t.month = ?
+       WHERE c.kind = 'expense'
+       ORDER BY c.sort_order, c.name`
+    )
+    .all(year, month);
+  res.json({ targets: rows });
+});
+
+app.post('/api/targets', requireAuth, (req, res) => {
+  const { category_id, year, month, amount } = req.body;
+  if (!category_id || !year || !month || amount === undefined || amount === null) {
+    return res.status(400).json({ error: 'category_id, year, month, amount are required' });
+  }
+  db.prepare(
+    `INSERT INTO targets (category_id, year, month, amount) VALUES (?, ?, ?, ?)
+     ON CONFLICT(category_id, year, month) DO UPDATE SET amount = excluded.amount`
+  ).run(category_id, year, month, amount);
+  res.json({ ok: true });
+});
+
+// ---------- Export ----------
+app.get('/api/export.json', requireAuth, (req, res) => {
+  const categories = db.prepare('SELECT * FROM categories ORDER BY kind, sort_order').all();
+  const entries = db
+    .prepare(
+      `SELECT e.year, e.month, c.kind, c.name AS category, e.amount, e.note
+       FROM entries e JOIN categories c ON c.id = e.category_id
+       ORDER BY e.year, e.month, c.kind`
+    )
+    .all();
+  const debts = db.prepare('SELECT * FROM debts ORDER BY sort_order').all();
+  const debtBalances = db
+    .prepare(
+      `SELECT d.name AS debt, b.year, b.month, b.balance, b.note
+       FROM debt_balances b JOIN debts d ON d.id = b.debt_id
+       ORDER BY b.year, b.month`
+    )
+    .all();
+  const targets = db
+    .prepare(
+      `SELECT c.name AS category, t.year, t.month, t.amount
+       FROM targets t JOIN categories c ON c.id = t.category_id
+       ORDER BY t.year, t.month`
+    )
+    .all();
+
+  res.setHeader('Content-Disposition', 'attachment; filename="budget-dashboard-export.json"');
+  res.json({
+    exported_at: new Date().toISOString(),
+    categories,
+    entries,
+    debts,
+    debtBalances,
+    targets
+  });
+});
+
+app.get('/api/export.csv', requireAuth, (req, res) => {
+  const entries = db
+    .prepare(
+      `SELECT e.year, e.month, c.kind, c.name AS category, e.amount, e.note
+       FROM entries e JOIN categories c ON c.id = e.category_id
+       ORDER BY e.year, e.month, c.kind, c.name`
+    )
+    .all();
+
+  const escapeCsv = (val) => {
+    if (val === null || val === undefined) return '';
+    const s = String(val);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const header = 'Year,Month,Type,Category,Amount,Note';
+  const rows = entries.map((e) =>
+    [e.year, e.month, e.kind, e.category, e.amount, e.note].map(escapeCsv).join(',')
+  );
+  const csv = [header, ...rows].join('\n');
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="budget-dashboard-entries.csv"');
+  res.send(csv);
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
