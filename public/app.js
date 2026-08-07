@@ -165,7 +165,12 @@ function renderSnapshot(entries) {
   const income = entries.filter((e) => e.kind === 'income').reduce((s, e) => s + e.amount, 0);
   const expense = entries.filter((e) => e.kind === 'expense').reduce((s, e) => s + e.amount, 0);
   const net = income - expense;
-  const rate = income > 0 ? Math.round((net / income) * 100) : 0;
+  const savingsBucketAmt = entries
+    .filter((e) => e.kind === 'expense' && e.budget_bucket === 'savings')
+    .reduce((s, e) => s + e.amount, 0);
+  // True savings rate = leftover cash + money already moved into Savings/Investing.
+  // (net already subtracts savings entries as if spent, so add them back here.)
+  const rate = income > 0 ? Math.round(((net + savingsBucketAmt) / income) * 100) : 0;
 
   document.getElementById('m-income').textContent = fmt(income);
   document.getElementById('m-expense').textContent = fmt(expense);

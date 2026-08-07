@@ -33,7 +33,10 @@ async function load() {
   netEl.textContent = fmt(data.totals.avgNet);
   netEl.className = 'metric-value ' + (data.totals.avgNet >= 0 ? 'v-green' : 'v-red');
 
-  const rate = data.totals.avgIncome > 0 ? Math.round((data.totals.avgNet / data.totals.avgIncome) * 100) : 0;
+  // True savings rate = leftover cash + average already moved into Savings/Investing.
+  const rate = data.totals.avgIncome > 0
+    ? Math.round(((data.totals.avgNet + (data.bucketAverages.savings || 0)) / data.totals.avgIncome) * 100)
+    : 0;
   const rateEl = document.getElementById('a-rate');
   rateEl.textContent = rate + '%';
   rateEl.className = 'metric-value ' + (rate >= 10 ? 'v-green' : rate >= 0 ? 'v-amber' : 'v-red');
