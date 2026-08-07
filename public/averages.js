@@ -90,13 +90,14 @@ function renderExpenseBars(expense) {
     return;
   }
   const max = sorted[0].avg;
+  const total = sorted.reduce((s, e) => s + e.avg, 0);
   container.innerHTML = sorted
     .map(
       (e) => `
     <div class="bar-row">
       <div class="bar-label">${e.category}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${(e.avg / max) * 100}%;background:var(--blue)"></div></div>
-      <div class="bar-amt">${fmt(e.avg)}</div>
+      <div class="bar-amt">${fmt(e.avg)} <span style="color:var(--muted)">(${((e.avg / total) * 100).toFixed(0)}%)</span></div>
     </div>`
     )
     .join('');
@@ -110,13 +111,14 @@ function renderIncomeBars(income) {
     return;
   }
   const max = sorted[0].avg;
+  const total = sorted.reduce((s, e) => s + e.avg, 0);
   container.innerHTML = sorted
     .map(
       (e) => `
     <div class="bar-row">
       <div class="bar-label">${e.category}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${(e.avg / max) * 100}%;background:var(--green)"></div></div>
-      <div class="bar-amt">${fmt(e.avg)}</div>
+      <div class="bar-amt">${fmt(e.avg)} <span style="color:var(--muted)">(${((e.avg / total) * 100).toFixed(0)}%)</span></div>
     </div>`
     )
     .join('');
@@ -130,12 +132,13 @@ function renderExpensePie(expense) {
     if (pieChart) { pieChart.destroy(); pieChart = null; }
     return;
   }
+  const total = sorted.reduce((s, e) => s + e.avg, 0);
   const ctx = canvas.getContext('2d');
   if (pieChart) pieChart.destroy();
   pieChart = new Chart(ctx, {
     type: 'pie',
     data: {
-      labels: sorted.map((e) => e.category),
+      labels: sorted.map((e) => `${e.category} (${((e.avg / total) * 100).toFixed(0)}%)`),
       datasets: [{
         data: sorted.map((e) => e.avg),
         backgroundColor: sorted.map((_, i) => PIE_COLORS[i % PIE_COLORS.length])
@@ -145,7 +148,11 @@ function renderExpensePie(expense) {
       responsive: true,
       plugins: {
         legend: { position: 'right', labels: { boxWidth: 12, font: { family: 'DM Sans', size: 11 } } },
-        tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${fmt(ctx.raw)}` } }
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.label.split(' (')[0]}: ${fmt(ctx.raw)} (${((ctx.raw / total) * 100).toFixed(0)}%)`
+          }
+        }
       }
     }
   });
