@@ -58,6 +58,13 @@
 
   .add-cat-link { font-size: 11.5px; color: var(--muted); font-family: 'DM Mono', monospace; cursor: pointer; margin-top: 12px; display: inline-block; text-decoration: underline; }
 
+  .wd-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .wd-row:last-child { border-bottom: none; }
+  .wd-note { color: var(--muted); font-size: 11.5px; margin-left: 6px; }
+  .wd-amt { font-family: 'DM Mono', monospace; }
+  .wd-del { color: var(--muted); cursor: pointer; font-size: 12px; margin-left: 12px; background: none; border: none; }
+  .wd-del:hover { color: var(--red); }
+
   .cat-select { margin-bottom: 12px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px; font-size: 12.5px; font-family: inherit; background: var(--surface); }
 
   @media (max-width: 620px) {
@@ -102,6 +109,37 @@
   <div class="chart-wrap">
     <select class="cat-select" id="debt-trend-select"></select>
     <canvas id="debt-trend-chart" height="80"></canvas>
+  </div>
+
+  <div class="section-label">Dedicated account (BeyondFinance)</div>
+  <div class="card">
+    <div class="metrics" style="grid-template-columns: repeat(3,1fr); margin-bottom: 16px;">
+      <div class="metric"><div class="metric-label">expected (calculated)</div><div class="metric-value" id="ded-expected">$0</div></div>
+      <div class="metric"><div class="metric-label">actual</div><div class="metric-value" id="ded-actual">$0</div></div>
+      <div class="metric"><div class="metric-label">variance</div><div class="metric-value" id="ded-variance">—</div></div>
+    </div>
+    <p style="font-size: 11.5px; color: var(--muted); margin-bottom: 12px;">Expected balance = all deposits minus all withdrawals, added up through this month.</p>
+    <div class="debt-row">
+      <div class="debt-name">Actual balance this month (check the real account)</div>
+      <div class="debt-input-wrap">
+        <span>$</span>
+        <input type="number" step="0.01" min="0" id="ded-actual-input" placeholder="actual" />
+        <span class="save-hint" id="ded-hint">saved</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Deposits this month</div>
+  <div class="card" id="ded-deposits"></div>
+  <span class="add-cat-link" id="add-deposit-link">+ log a deposit</span>
+
+  <div class="section-label">Withdrawals this month</div>
+  <div class="card" id="ded-withdrawals"></div>
+  <span class="add-cat-link" id="add-withdrawal-link">+ log a withdrawal</span>
+
+  <div class="section-label">Dedicated account over time</div>
+  <div class="chart-wrap">
+    <canvas id="ded-trend-chart" height="90"></canvas>
   </div>
 
 <script src="debt.js"></script>

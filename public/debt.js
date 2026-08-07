@@ -3,7 +3,8 @@ const state = {
   month: new Date().getMonth() + 1,
   debts: [],
   totalChart: null,
-  debtChart: null
+  debtChart: null,
+  dedicatedChart: null
 };
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -23,11 +24,13 @@ document.getElementById('prev-month').addEventListener('click', () => {
   state.month--;
   if (state.month < 1) { state.month = 12; state.year--; }
   refreshMonth();
+  refreshDedicated();
 });
 document.getElementById('next-month').addEventListener('click', () => {
   state.month++;
   if (state.month > 12) { state.month = 1; state.year++; }
   refreshMonth();
+  refreshDedicated();
 });
 
 function renderMonthLabel() {
@@ -212,9 +215,145 @@ function renderDebtChart(byDebt, name) {
   });
 }
 
+// ---------- Dedicated account ----------
+document.getElementById('ded-actual-input').addEventListener('change', saveDedicatedActual);
+
+async function saveDedicatedActual() {
+  const actualRaw = document.getElementById('ded-actual-input').value;
+  const actual = actualRaw === '' ? null : parseFloat(actualRaw);
+
+  await fetch('/api/dedicated/balance', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ year: state.year, month: state.month, actual })
+  });
+
+  const hint = document.getElementById('ded-hint');
+  hint.classList.add('show');
+  setTimeout(() => hint.classList.remove('show'), 1500);
+
+  refreshDedicated();
+}
+
+function updateDedicatedMetrics(expected, actual) {
+  document.getElementById('ded-expected').textContent = fmt(expected);
+  document.getElementById('ded-actual').textContent = fmt(actual);
+  const varEl = document.getElementById('ded-variance');
+  if (expected === null || actual === null || actual === undefined) {
+    varEl.textContent = '—';
+    varEl.className = 'metric-value';
+  } else {
+    const diff = actual - expected;
+    varEl.textContent = (diff >= 0 ? '+' : '−') + fmt(Math.abs(diff));
+    varEl.className = 'metric-value ' + (diff >= 0 ? 'v-green' : 'v-red');
+  }
+}
+
+document.getElementById('add-deposit-link').addEventListener('click', async () => {
+  const amountStr = prompt('Deposit amount ($):');
+  if (!amountStr) return;
+  const amount = parseFloat(amountStr);
+  if (isNaN(amount) || amount <= 0) return;
+  const note = prompt('Note (optional, e.g. "BeyondFinance monthly draft"):') || '';
+  await fetch('/api/dedicated/deposit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ year: state.year, month: state.month, amount, note })
+  });
+  refreshDedicated();
+});
+
+document.getElementById('add-withdrawal-link').addEventListener('click', async () => {
+  const amountStr = prompt('Withdrawal amount ($):');
+  if (!amountStr) return;
+  const amount = parseFloat(amountStr);
+  if (isNaN(amount) || amount <= 0) return;
+  const note = prompt('What was it for? (e.g. "PNC settlement fee")') || '';
+  await fetch('/api/dedicated/withdrawal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ year: state.year, month: state.month, amount, note })
+  });
+  refreshDedicated();
+});
+
+function renderDedList(containerId, items, onDelete) {
+  const list = document.getElementById(containerId);
+  if (items.length === 0) {
+    list.innerHTML = '<div class="empty-msg">Nothing logged for this month.</div>';
+    return;
+  }
+  list.innerHTML = items
+    .map(
+      (w) => `
+    <div class="wd-row">
+      <div>
+        <span class="wd-amt">${fmt(w.amount)}</span>
+        ${w.note ? `<span class="wd-note">${w.note}</span>` : ''}
+      </div>
+      <button class="wd-del" data-id="${w.id}">delete</button>
+    </div>`
+    )
+    .join('');
+  list.querySelectorAll('.wd-del').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      await onDelete(btn.dataset.id);
+      refreshDedicated();
+    });
+  });
+}
+
+async function refreshDedicated() {
+  const res = await fetch(`/api/dedicated/${state.year}/${state.month}`);
+  const data = await res.json();
+
+  document.getElementById('ded-actual-input').value = data.actual !== null ? data.actual : '';
+  updateDedicatedMetrics(data.expectedCumulative, data.actual);
+
+  renderDedList('ded-deposits', data.deposits, async (id) => {
+    await fetch(`/api/dedicated/deposit/${id}`, { method: 'DELETE' });
+  });
+  renderDedList('ded-withdrawals', data.withdrawals, async (id) => {
+    await fetch(`/api/dedicated/withdrawal/${id}`, { method: 'DELETE' });
+  });
+
+  loadDedicatedTrend();
+}
+
+async function loadDedicatedTrend() {
+  const res = await fetch('/api/dedicated/trend');
+  const data = await res.json();
+
+  const labels = data.months.map((m) => {
+    const [y, mo] = m.key.split('-');
+    return `${MONTH_NAMES[parseInt(mo, 10) - 1].slice(0, 3)} ${y.slice(2)}`;
+  });
+  const expected = data.months.map((m) => m.expected);
+  const actual = data.months.map((m) => m.actual);
+
+  const ctx = document.getElementById('ded-trend-chart').getContext('2d');
+  if (state.dedicatedChart) state.dedicatedChart.destroy();
+  state.dedicatedChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Expected', data: expected, borderColor: '#7a7870', backgroundColor: 'transparent', borderDash: [4, 3], tension: 0.25 },
+        { label: 'Actual', data: actual, borderColor: '#2761a0', backgroundColor: 'rgba(39,97,160,0.15)', fill: true, tension: 0.25 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { font: { family: 'DM Sans', size: 11 } } } },
+      scales: { y: { ticks: { callback: (v) => '$' + v } } }
+    }
+  });
+}
+
 async function init() {
   await refreshMonth();
   await loadTrend();
+  await refreshDedicated();
 }
 
 checkSession();
