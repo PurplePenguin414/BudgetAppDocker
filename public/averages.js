@@ -42,6 +42,7 @@ async function load() {
   renderExpenseBars(data.expense);
   renderExpensePie(data.expense);
   renderIncomeBars(data.income);
+  renderGoalsCard(data.expense);
 }
 
 function renderRuleCard(bucketAverages, avgIncome) {
@@ -91,7 +92,7 @@ function renderExpenseBars(expense) {
   }
   const max = sorted[0].avg;
   const total = sorted.reduce((s, e) => s + e.avg, 0);
-  container.innerHTML = sorted
+  const rowsHtml = sorted
     .map(
       (e) => `
     <div class="bar-row">
@@ -101,6 +102,13 @@ function renderExpenseBars(expense) {
     </div>`
     )
     .join('');
+  const totalHtml = `
+    <div class="bar-row" style="border-top:1.5px solid var(--border); padding-top:12px; margin-top:4px;">
+      <div class="bar-label" style="font-weight:600;">Total</div>
+      <div class="bar-track" style="visibility:hidden;"></div>
+      <div class="bar-amt" style="font-weight:600;">${fmt(total)}</div>
+    </div>`;
+  container.innerHTML = rowsHtml + totalHtml;
 }
 
 function renderIncomeBars(income) {
@@ -155,6 +163,71 @@ function renderExpensePie(expense) {
         }
       }
     }
+  });
+}
+
+async function renderGoalsCard(expense) {
+  const container = document.getElementById('goals-card');
+  const res = await fetch('/api/goals');
+  const data = await res.json();
+
+  if (data.goals.length === 0) {
+    container.innerHTML = '<div class="empty-msg">No expense categories yet.</div>';
+    return;
+  }
+
+  const avgByCategory = {};
+  expense.forEach((e) => { avgByCategory[e.category] = e.avg; });
+
+  let totalGoal = 0;
+  let totalAvg = 0;
+  data.goals.forEach((g) => {
+    if (g.amount) totalGoal += g.amount;
+    totalAvg += avgByCategory[g.category_name] || 0;
+  });
+  const totalOver = totalGoal > 0 && totalAvg > totalGoal;
+
+  const rowsHtml = data.goals
+    .map((g) => {
+      const avg = avgByCategory[g.category_name] || 0;
+      const goal = g.amount;
+      const pct = goal ? Math.min((avg / goal) * 100, 100) : 0;
+      const over = goal && avg > goal;
+      const color = !goal ? 'var(--surface2)' : over ? 'var(--red)' : 'var(--blue)';
+      return `
+      <div class="goal-row">
+        <div class="goal-name">${g.category_name}</div>
+        <div class="goal-track"><div class="goal-fill" style="width:${pct}%;background:${color}"></div></div>
+        <div class="goal-actual" style="color:${over ? 'var(--red)' : 'var(--text)'}">${fmt(avg)}</div>
+        <div class="goal-input-wrap">
+          <span>of $</span>
+          <input type="number" step="0.01" min="0" data-category-id="${g.category_id}" value="${goal !== null ? goal : ''}" placeholder="—" />
+        </div>
+      </div>`;
+    })
+    .join('');
+
+  const totalHtml = `
+    <div class="goal-row" style="border-top:1.5px solid var(--border); padding-top:12px; margin-top:4px; border-bottom:none;">
+      <div class="goal-name" style="font-weight:600;">Total</div>
+      <div class="goal-track" style="visibility:hidden;"></div>
+      <div class="goal-actual" style="font-weight:600; color:${totalOver ? 'var(--red)' : 'var(--text)'}">${fmt(totalAvg)}</div>
+      <div class="goal-input-wrap"><span>of ${fmt(totalGoal)}</span></div>
+    </div>`;
+
+  container.innerHTML = rowsHtml + totalHtml;
+
+  container.querySelectorAll('.goal-input-wrap input').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const amount = parseFloat(input.value);
+      if (isNaN(amount) || amount < 0) return;
+      await fetch('/api/goals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category_id: input.dataset.categoryId, amount })
+      });
+      load();
+    });
   });
 }
 
