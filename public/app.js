@@ -51,6 +51,13 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
   checkSession();
 });
 
+document.getElementById('export-btn').addEventListener('click', () => {
+  const wantsCsv = confirm(
+    'Click OK to export as CSV (entries only, spreadsheet-friendly).\nClick Cancel to export a full JSON backup (all data, including debts and targets).'
+  );
+  window.location.href = wantsCsv ? '/api/export.csv' : '/api/export.json';
+});
+
 // ---------- Month nav ----------
 document.getElementById('prev-month').addEventListener('click', () => {
   state.month--;
@@ -150,6 +157,8 @@ async function refreshMonth() {
   const data = await res.json();
   renderSnapshot(data.entries);
   renderEntryList(data.entries);
+  renderTargets(data.entries);
+  renderMomTable(data.entries);
 }
 
 function renderSnapshot(entries) {
@@ -348,6 +357,124 @@ function renderEntryList(entries) {
       loadTrends();
     });
   });
+}
+
+// ---------- Budget targets ----------
+async function renderTargets(entries) {
+  const container = document.getElementById('targets-card');
+  const res = await fetch(`/api/targets/${state.year}/${state.month}`);
+  const data = await res.json();
+
+  const actuals = {};
+  entries.filter((e) => e.kind === 'expense').forEach((e) => {
+    actuals[e.category_id] = (actuals[e.category_id] || 0) + e.amount;
+  });
+
+  if (data.targets.length === 0) {
+    container.innerHTML = '<div class="empty-msg">No expense categories yet.</div>';
+    return;
+  }
+
+  container.innerHTML = data.targets
+    .map((t) => {
+      const actual = actuals[t.category_id] || 0;
+      const target = t.amount;
+      const pct = target ? Math.min((actual / target) * 100, 100) : 0;
+      const over = target && actual > target;
+      const color = !target ? 'var(--surface2)' : over ? 'var(--red)' : 'var(--blue)';
+      return `
+      <div class="target-row">
+        <div class="target-name">${t.category_name}</div>
+        <div class="target-track"><div class="target-fill" style="width:${pct}%;background:${color}"></div></div>
+        <div class="target-actual" style="color:${over ? 'var(--red)' : 'var(--text)'}">${fmt(actual)}</div>
+        <div class="target-input-wrap">
+          <span>of $</span>
+          <input type="number" step="0.01" min="0" data-category-id="${t.category_id}" value="${target !== null ? target : ''}" placeholder="—" />
+        </div>
+      </div>`;
+    })
+    .join('');
+
+  container.querySelectorAll('.target-input-wrap input').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const amount = parseFloat(input.value);
+      if (isNaN(amount) || amount < 0) return;
+      await fetch('/api/targets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category_id: input.dataset.categoryId, year: state.year, month: state.month, amount })
+      });
+      refreshMonth();
+    });
+  });
+}
+
+// ---------- Month over month ----------
+async function renderMomTable(currentEntries) {
+  const container = document.getElementById('mom-table');
+  let prevYear = state.year;
+  let prevMonth = state.month - 1;
+  if (prevMonth < 1) { prevMonth = 12; prevYear--; }
+
+  const res = await fetch(`/api/month/${prevYear}/${prevMonth}`);
+  const prevData = await res.json();
+
+  const curTotals = {};
+  currentEntries.forEach((e) => {
+    const key = e.category_name + '|' + e.kind;
+    curTotals[key] = (curTotals[key] || 0) + e.amount;
+  });
+  const prevTotals = {};
+  prevData.entries.forEach((e) => {
+    const key = e.category_name + '|' + e.kind;
+    prevTotals[key] = (prevTotals[key] || 0) + e.amount;
+  });
+
+  const allKeys = Array.from(new Set([...Object.keys(curTotals), ...Object.keys(prevTotals)]));
+  if (allKeys.length === 0) {
+    container.innerHTML = '<div class="empty-msg">Not enough data yet — log entries in both months to compare.</div>';
+    return;
+  }
+
+  const rows = allKeys
+    .map((key) => {
+      const [name, kind] = key.split('|');
+      const cur = curTotals[key] || 0;
+      const prev = prevTotals[key] || 0;
+      let changeLabel = '—';
+      let color = 'var(--muted)';
+      if (prev > 0) {
+        const pct = ((cur - prev) / prev) * 100;
+        changeLabel = (pct >= 0 ? '+' : '') + pct.toFixed(0) + '%';
+        const improved = kind === 'income' ? pct >= 0 : pct <= 0;
+        color = pct === 0 ? 'var(--muted)' : improved ? 'var(--green)' : 'var(--red)';
+      } else if (cur > 0) {
+        changeLabel = 'new';
+        color = 'var(--muted)';
+      }
+      return { name, kind, cur, prev, changeLabel, color };
+    })
+    .sort((a, b) => b.cur - a.cur);
+
+  container.innerHTML = `
+    <table class="mom">
+      <thead>
+        <tr><th>Category</th><th style="text-align:right">This month</th><th style="text-align:right">Last month</th><th style="text-align:right">Change</th></tr>
+      </thead>
+      <tbody>
+        ${rows
+          .map(
+            (r) => `
+        <tr>
+          <td>${r.name}</td>
+          <td class="num">${fmt(r.cur)}</td>
+          <td class="num">${fmt(r.prev)}</td>
+          <td class="num" style="color:${r.color}">${r.changeLabel}</td>
+        </tr>`
+          )
+          .join('')}
+      </tbody>
+    </table>`;
 }
 
 // ---------- Trends ----------
