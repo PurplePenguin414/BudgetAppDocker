@@ -22,6 +22,16 @@ async function loadBills() {
   const res = await fetch('/api/bills');
   const data = await res.json();
   renderBills(data.bills);
+  renderSummary(data.bills);
+}
+
+function renderSummary(bills) {
+  const withAmount = bills.filter((b) => b.amount !== null && b.amount !== undefined);
+  const total = withAmount.reduce((s, b) => s + b.amount, 0);
+  const avgMonthly = withAmount.reduce((s, b) => s + b.amount * (30 / (b.cycle_days || 30)), 0);
+
+  document.getElementById('b-total').textContent = fmt(total);
+  document.getElementById('b-avg-monthly').textContent = fmt(avgMonthly);
 }
 
 function renderBills(bills) {
@@ -44,7 +54,7 @@ function renderBills(bills) {
       <div class="bill-status ${status.cls}">${status.label}</div>
       <div class="bill-actions">
         <button class="bill-btn" data-charged="${b.id}">mark charged today</button>
-        <button class="bill-btn" data-edit="${b.id}" data-cycle="${b.cycle_days}" data-amount="${b.amount || ''}" data-name="${b.name}">edit</button>
+        <button class="bill-btn" data-edit="${b.id}" data-cycle="${b.cycle_days}" data-amount="${b.amount || ''}" data-name="${b.name}" data-last-charged="${b.last_charged_date || ''}">edit</button>
         <button class="bill-del" data-del="${b.id}">delete</button>
       </div>
     </div>`;
@@ -65,9 +75,18 @@ function renderBills(bills) {
       if (newName === null) return;
       const newAmount = prompt('Amount ($, leave blank if unknown):', btn.dataset.amount);
       const newCycle = prompt('Billing cycle length in days:', btn.dataset.cycle);
+      const newDate = prompt('Last charged date (YYYY-MM-DD, leave blank to clear):', btn.dataset.lastCharged || '');
       const payload = { name: newName.trim() };
       if (newAmount !== null) payload.amount = newAmount.trim() === '' ? null : parseFloat(newAmount);
       if (newCycle !== null && !isNaN(parseInt(newCycle, 10))) payload.cycle_days = parseInt(newCycle, 10);
+      if (newDate !== null) {
+        const trimmed = newDate.trim();
+        if (trimmed !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          alert('Date must be in YYYY-MM-DD format, e.g. 2026-08-15. Edit not saved — try again.');
+          return;
+        }
+        payload.last_charged_date = trimmed === '' ? null : trimmed;
+      }
       await fetch(`/api/bills/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -92,8 +111,15 @@ document.getElementById('add-bill-link').addEventListener('click', async () => {
   const amount = amountStr && amountStr.trim() !== '' ? parseFloat(amountStr) : null;
   const cycleStr = prompt('Billing cycle length in days (e.g. 30):', '30');
   const cycle_days = cycleStr && !isNaN(parseInt(cycleStr, 10)) ? parseInt(cycleStr, 10) : 30;
-  const setToday = confirm('Was this last charged today? Click OK for today, Cancel to leave the date unset for now.');
-  const last_charged_date = setToday ? new Date().toISOString().slice(0, 10) : null;
+  const dateStr = prompt('Last date it was charged (YYYY-MM-DD, leave blank if unknown):');
+  let last_charged_date = null;
+  if (dateStr && dateStr.trim() !== '') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())) {
+      alert('Date must be in YYYY-MM-DD format, e.g. 2026-08-15. Bill not saved — try again.');
+      return;
+    }
+    last_charged_date = dateStr.trim();
+  }
 
   await fetch('/api/bills', {
     method: 'POST',
