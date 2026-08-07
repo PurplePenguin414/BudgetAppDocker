@@ -279,9 +279,13 @@ app.get('/api/trends', requireAuth, (req, res) => {
 
 // ---------- Averages ----------
 app.get('/api/averages', requireAuth, (req, res) => {
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth() + 1;
+
   const monthRows = db
-    .prepare('SELECT DISTINCT year, month FROM entries')
-    .all();
+    .prepare('SELECT DISTINCT year, month FROM entries WHERE NOT (year = ? AND month = ?)')
+    .all(curYear, curMonth);
   const monthCount = monthRows.length;
 
   if (monthCount === 0) {
@@ -298,10 +302,11 @@ app.get('/api/averages', requireAuth, (req, res) => {
     .prepare(
       `SELECT c.id, c.name, c.kind, c.budget_bucket, SUM(e.amount) AS total
        FROM entries e JOIN categories c ON c.id = e.category_id
+       WHERE NOT (e.year = ? AND e.month = ?)
        GROUP BY c.id, c.name, c.kind, c.budget_bucket
        ORDER BY c.kind, total DESC`
     )
-    .all();
+    .all(curYear, curMonth);
 
   const income = [];
   const expense = [];
