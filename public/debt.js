@@ -95,9 +95,10 @@ function renderDebtList(debts) {
       const hint = document.getElementById(`hint-${input.dataset.debtId}`);
       hint.classList.add('show');
       setTimeout(() => hint.classList.remove('show'), 1500);
-      await renderMetrics(state.debts.map((d) =>
+      state.debts = state.debts.map((d) =>
         d.debt_id == input.dataset.debtId ? { ...d, balance } : d
-      ));
+      );
+      await renderMetrics(state.debts);
       loadTrend();
     });
   });
