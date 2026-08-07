@@ -144,11 +144,32 @@ if (debtCount === 0) {
   const insertDebt = db.prepare(
     'INSERT INTO debts (name, is_default, sort_order) VALUES (?, 1, ?)'
   );
-  const debtDefaults = ['PNC (BeyondFinance)', 'Discover (BeyondFinance)', 'Capital One'];
+  const debtDefaults = ['Discover', 'PNC Bank', 'Citi Bank', 'Capital One'];
   const seedDebts = db.transaction(() => {
     debtDefaults.forEach((name, i) => insertDebt.run(name, i));
   });
   seedDebts();
+}
+
+// ---------- Migration: rename old debt labels, add Citi Bank for pre-existing installs ----------
+const debtRenames = {
+  'PNC (BeyondFinance)': 'PNC Bank',
+  'Discover (BeyondFinance)': 'Discover'
+};
+const renameDebt = db.prepare('UPDATE debts SET name = ? WHERE name = ?');
+const debtRenameMigration = db.transaction(() => {
+  Object.entries(debtRenames).forEach(([oldName, newName]) => {
+    const exists = db.prepare('SELECT id FROM debts WHERE name = ?').get(oldName);
+    const newExists = db.prepare('SELECT id FROM debts WHERE name = ?').get(newName);
+    if (exists && !newExists) renameDebt.run(newName, oldName);
+  });
+});
+debtRenameMigration();
+
+const hasCitiBank = db.prepare("SELECT id FROM debts WHERE name = 'Citi Bank'").get();
+if (!hasCitiBank) {
+  const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM debts').get().m;
+  db.prepare('INSERT INTO debts (name, is_default, sort_order) VALUES (?, 1, ?)').run('Citi Bank', maxOrder + 1);
 }
 
 // ---------- Migration: assign buckets / add Savings category for pre-existing installs ----------
