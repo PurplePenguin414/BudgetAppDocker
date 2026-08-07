@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bills — Budget Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --surface2: #efede7;
+    --border: rgba(0,0,0,0.09);
+    --text: #1a1917;
+    --muted: #7a7870;
+    --red: #c94235;
+    --red-bg: #fdf0ee;
+    --amber: #b87318;
+    --amber-bg: #fdf4e3;
+    --green: #2a8a5f;
+    --green-bg: #edf7f1;
+    --blue: #2761a0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); padding: 36px 24px 80px; max-width: 920px; margin: 0 auto; }
+  h1 { font-weight: 500; font-size: 22px; letter-spacing: -0.4px; }
+
+  .header { margin-bottom: 20px; }
+  .header p { font-size: 12px; color: var(--muted); margin-top: 4px; font-family: 'DM Mono', monospace; }
+
+  .section-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); margin-bottom: 11px; margin-top: 32px; }
+  .section-label:first-of-type { margin-top: 0; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; }
+  .empty-msg { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+
+  .bill-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .bill-row:last-child { border-bottom: none; }
+  .bill-main { flex: 1; }
+  .bill-name { font-size: 14px; font-weight: 500; }
+  .bill-meta { font-size: 11.5px; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 3px; }
+  .bill-status { font-size: 11.5px; font-family: 'DM Mono', monospace; padding: 4px 9px; border-radius: 6px; white-space: nowrap; }
+  .status-overdue { background: var(--red-bg); color: var(--red); }
+  .status-soon { background: var(--amber-bg); color: var(--amber); }
+  .status-ok { background: var(--green-bg); color: var(--green); }
+  .status-unset { background: var(--surface2); color: var(--muted); }
+  .bill-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .bill-btn { font-family: 'DM Mono', monospace; font-size: 11px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; color: var(--text); }
+  .bill-btn:hover { background: var(--surface2); }
+  .bill-del { color: var(--muted); cursor: pointer; font-size: 11px; background: none; border: none; }
+  .bill-del:hover { color: var(--red); }
+
+  .add-cat-link { font-size: 11.5px; color: var(--muted); font-family: 'DM Mono', monospace; cursor: pointer; margin-top: 12px; display: inline-block; text-decoration: underline; }
+
+  @media (max-width: 620px) {
+    .bill-row { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<div id="topnav-mount"></div>
+
+  <div class="header">
+    <h1>Bills & Subscriptions</h1>
+    <p>Cycle-based tracking — for bills that don't land on the same day every month</p>
+  </div>
+
+  <div class="section-label">Upcoming</div>
+  <p style="font-size: 11.5px; color: var(--muted); margin-bottom: 10px;">
+    Each bill's next due date is estimated from when it was last charged plus its billing cycle length. Hit "mark charged today" whenever it actually goes through, and the next estimate updates from there.
+  </p>
+  <div class="card" id="bills-list"></div>
+  <span class="add-cat-link" id="add-bill-link">+ add a bill</span>
+
+<script src="nav.js"></script>
+<script src="bills.js"></script>
+</body>
+</html>

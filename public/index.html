@@ -6,6 +6,7 @@
 <title>Budget Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
 <script src="vendor/chart.umd.js"></script>
 <style>
   :root {
@@ -147,14 +148,14 @@
 
 <div id="app" style="display:none;">
 
+<div id="topnav-mount"></div>
+
   <div class="header">
     <div>
       <h1>Megan's Budget Dashboard</h1>
       <p>Monthly income &amp; spending — tracked over time</p>
     </div>
     <div>
-      <a href="debt.html" class="nav-link">Debt</a>
-      <a href="averages.html" class="nav-link">Averages</a>
       <button id="export-btn" class="nav-link" style="cursor:pointer;">Export</button>
       <button id="logout-btn">Log out</button>
     </div>
@@ -226,6 +227,7 @@
 
 </div>
 
+<script src="nav.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

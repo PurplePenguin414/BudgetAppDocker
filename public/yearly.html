@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Average Budget — Budget Dashboard</title>
+<title>Yearly Review — Budget Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="vendor/chart.umd.js"></script>
 <link rel="stylesheet" href="shared.css">
+<script src="vendor/chart.umd.js"></script>
 <style>
   :root {
     --bg: #f7f6f2;
@@ -25,10 +25,12 @@
   body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); padding: 36px 24px 80px; max-width: 920px; margin: 0 auto; }
   h1 { font-weight: 500; font-size: 22px; letter-spacing: -0.4px; }
 
-  .header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 28px; border-bottom: 1px solid var(--border); padding-bottom: 18px; }
+  .header { margin-bottom: 20px; }
   .header p { font-size: 12px; color: var(--muted); margin-top: 4px; font-family: 'DM Mono', monospace; }
-  .nav-link { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text); text-decoration: none; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; display: inline-block; background: var(--surface); }
-  .nav-link:hover { background: var(--surface2); }
+
+  .year-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
+  .year-nav button { border: 1px solid var(--border); background: var(--surface); border-radius: 7px; width: 32px; height: 32px; font-size: 15px; cursor: pointer; color: var(--text); }
+  .year-nav .label { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; min-width: 80px; text-align: center; }
 
   .section-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); margin-bottom: 11px; margin-top: 32px; }
   .section-label:first-of-type { margin-top: 0; }
@@ -40,14 +42,15 @@
   .v-green { color: var(--green); } .v-red { color: var(--red); } .v-amber { color: var(--amber); }
 
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; }
-  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; }
+  .empty-msg { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+
   .bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
   .bar-row:last-child { margin-bottom: 0; }
   .bar-label { font-size: 13px; width: 150px; flex-shrink: 0; }
   .bar-track { flex: 1; background: var(--surface2); border-radius: 3px; height: 7px; overflow: hidden; }
   .bar-fill { height: 7px; border-radius: 3px; }
   .bar-amt { font-size: 12.5px; font-family: 'DM Mono', monospace; color: var(--text); min-width: 70px; text-align: right; }
-  .empty-msg { color: var(--muted); font-size: 13px; padding: 6px 2px; }
 
   .rule-row { margin-bottom: 16px; }
   .rule-row:last-child { margin-bottom: 0; }
@@ -59,21 +62,16 @@
   .rule-marker { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); opacity: 0.35; }
   .rule-meta { display: flex; justify-content: space-between; margin-top: 5px; font-size: 11.5px; font-family: 'DM Mono', monospace; color: var(--muted); }
 
+  table.mtable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.mtable th { text-align: left; font-family: 'DM Mono', monospace; font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  table.mtable td { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  table.mtable tr:last-child td { border-bottom: none; }
+  table.mtable td.num { font-family: 'DM Mono', monospace; text-align: right; }
+
   @media (max-width: 620px) {
     .metrics { grid-template-columns: repeat(2,1fr); }
-    .two-col { grid-template-columns: 1fr; }
     .bar-label { width: 100px; font-size: 12px; }
   }
-
-  .goal-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
-  .goal-row:last-child { border-bottom: none; }
-  .goal-name { width: 130px; flex-shrink: 0; font-size: 13px; }
-  .goal-track { flex: 1; background: var(--surface2); border-radius: 3px; height: 7px; overflow: hidden; }
-  .goal-fill { height: 7px; border-radius: 3px; }
-  .goal-actual { font-size: 12px; font-family: 'DM Mono', monospace; min-width: 60px; text-align: right; }
-  .goal-input-wrap { display: flex; align-items: center; gap: 3px; }
-  .goal-input-wrap span { color: var(--muted); font-size: 11.5px; }
-  .goal-input-wrap input { width: 70px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-family: 'DM Mono', monospace; background: var(--surface); }
 </style>
 </head>
 <body>
@@ -81,43 +79,48 @@
 <div id="topnav-mount"></div>
 
   <div class="header">
-    <div>
-      <h1>Average Monthly Budget</h1>
-      <p id="month-count-label">—</p>
-    </div>
+    <h1>Yearly Review</h1>
+    <p>The whole year, rolled up</p>
+  </div>
+
+  <div class="year-nav">
+    <button id="prev-year">&larr;</button>
+    <div class="label" id="year-label">—</div>
+    <button id="next-year">&rarr;</button>
   </div>
 
   <div id="empty-state" style="display:none;" class="card">
-    <div class="empty-msg">No data logged yet. Log at least one month on the dashboard to see your averages here.</div>
+    <div class="empty-msg">No data logged for this year yet.</div>
   </div>
 
   <div id="content" style="display:none;">
-    <div class="section-label">Average monthly snapshot</div>
+    <div class="section-label">Year totals</div>
     <div class="metrics">
-      <div class="metric"><div class="metric-label">avg income</div><div class="metric-value v-green" id="a-income">$0</div></div>
-      <div class="metric"><div class="metric-label">avg expenses</div><div class="metric-value" id="a-expense">$0</div></div>
-      <div class="metric"><div class="metric-label">avg net</div><div class="metric-value" id="a-net">$0</div></div>
-      <div class="metric"><div class="metric-label">avg savings rate</div><div class="metric-value" id="a-rate">0%</div></div>
+      <div class="metric"><div class="metric-label">total income</div><div class="metric-value v-green" id="y-income">$0</div></div>
+      <div class="metric"><div class="metric-label">total expenses</div><div class="metric-value" id="y-expense">$0</div></div>
+      <div class="metric"><div class="metric-label">total net</div><div class="metric-value" id="y-net">$0</div></div>
+      <div class="metric"><div class="metric-label">savings rate</div><div class="metric-value" id="y-rate">0%</div></div>
     </div>
+    <p style="font-size: 11px; color: var(--muted); margin-top: 8px;" id="y-months-label"></p>
 
-    <div class="section-label">Average 50 / 30 / 20 breakdown</div>
+    <div class="section-label">50 / 30 / 20 for the year</div>
     <div class="card" id="rule-card"></div>
 
-    <div class="section-label">Average spend by category</div>
-    <div class="two-col">
-      <div class="card" id="expense-bars"></div>
-      <div class="card"><canvas id="expense-pie" height="220"></canvas></div>
+    <div class="section-label">Top categories this year</div>
+    <div class="card" id="top-categories"></div>
+
+    <div class="section-label">Income vs. expenses by month</div>
+    <div class="chart-wrap">
+      <canvas id="year-chart" height="90"></canvas>
     </div>
 
-    <div class="section-label">Expected spend per category</div>
-    <p style="font-size: 11.5px; color: var(--muted); margin-bottom: 10px;">Set a blanket monthly goal per category — compared against your average actual spend.</p>
-    <div class="card" id="goals-card"></div>
-
-    <div class="section-label">Average income by source</div>
-    <div class="card" id="income-bars"></div>
+    <div class="section-label">Monthly breakdown</div>
+    <div class="card">
+      <table class="mtable" id="monthly-table"></table>
+    </div>
   </div>
 
 <script src="nav.js"></script>
-<script src="averages.js"></script>
+<script src="yearly.js"></script>
 </body>
 </html>

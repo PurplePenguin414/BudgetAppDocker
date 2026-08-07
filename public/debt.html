@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="vendor/chart.umd.js"></script>
+<link rel="stylesheet" href="shared.css">
 <style>
   :root {
     --bg: #f7f6f2;
@@ -75,12 +76,13 @@
 </head>
 <body>
 
+<div id="topnav-mount"></div>
+
   <div class="header">
     <div>
       <h1>Debt Payoff Tracker</h1>
       <p>Log your balance each month to watch it come down</p>
     </div>
-    <a href="index.html" class="nav-link">&larr; Back to dashboard</a>
   </div>
 
   <div class="month-nav">
@@ -142,6 +144,7 @@
     <canvas id="ded-trend-chart" height="90"></canvas>
   </div>
 
+<script src="nav.js"></script>
 <script src="debt.js"></script>
 </body>
 </html>
