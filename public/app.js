@@ -183,13 +183,14 @@ function renderSnapshot(entries) {
     return;
   }
   const max = sorted[0][1];
+  const total = sorted.reduce((s, [, amt]) => s + amt, 0);
   container.innerHTML = sorted
     .map(
       ([name, amt]) => `
     <div class="bar-row">
       <div class="bar-label">${name}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${(amt / max) * 100}%;background:var(--blue)"></div></div>
-      <div class="bar-amt">${fmt(amt)}</div>
+      <div class="bar-amt">${fmt(amt)} <span style="color:var(--muted)">(${((amt / total) * 100).toFixed(0)}%)</span></div>
     </div>`
     )
     .join('');
@@ -203,12 +204,13 @@ function renderExpensePie(sorted) {
     if (state.pieChart) { state.pieChart.destroy(); state.pieChart = null; }
     return;
   }
+  const total = sorted.reduce((s, [, amt]) => s + amt, 0);
   const ctx = canvas.getContext('2d');
   if (state.pieChart) state.pieChart.destroy();
   state.pieChart = new Chart(ctx, {
     type: 'pie',
     data: {
-      labels: sorted.map(([name]) => name),
+      labels: sorted.map(([name, amt]) => `${name} (${((amt / total) * 100).toFixed(0)}%)`),
       datasets: [{
         data: sorted.map(([, amt]) => amt),
         backgroundColor: sorted.map((_, i) => PIE_COLORS[i % PIE_COLORS.length])
@@ -220,7 +222,7 @@ function renderExpensePie(sorted) {
         legend: { position: 'right', labels: { boxWidth: 12, font: { family: 'DM Sans', size: 11 } } },
         tooltip: {
           callbacks: {
-            label: (ctx) => `${ctx.label}: ${fmt(ctx.raw)}`
+            label: (ctx) => `${ctx.label.split(' (')[0]}: ${fmt(ctx.raw)} (${((ctx.raw / total) * 100).toFixed(0)}%)`
           }
         }
       }

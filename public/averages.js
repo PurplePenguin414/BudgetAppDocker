@@ -24,7 +24,7 @@ async function load() {
   document.getElementById('empty-state').style.display = 'none';
   document.getElementById('content').style.display = 'block';
   document.getElementById('month-count-label').textContent =
-    `Averaged across ${data.monthCount} month${data.monthCount === 1 ? '' : 's'} of data`;
+    `Averaged across ${data.monthCount} completed month${data.monthCount === 1 ? '' : 's'} (current month excluded)`;
 
   document.getElementById('a-income').textContent = fmt(data.totals.avgIncome);
   document.getElementById('a-expense').textContent = fmt(data.totals.avgExpense);
