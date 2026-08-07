@@ -97,6 +97,24 @@ CREATE TABLE IF NOT EXISTS dedicated_account_deposits (
   note TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS savings_allocations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  amount REAL NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS bills (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  amount REAL,
+  cycle_days INTEGER NOT NULL DEFAULT 30,
+  last_charged_date TEXT,
+  note TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // ---------- Migration: add budget_bucket to existing installs ----------
@@ -728,6 +746,199 @@ app.get('/api/export.csv', requireAuth, (req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="budget-dashboard-entries.csv"');
   res.send(csv);
+});
+
+// ---------- Savings allocations & net worth ----------
+function totalSavedAllTime() {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(e.amount), 0) AS total
+       FROM entries e JOIN categories c ON c.id = e.category_id
+       WHERE c.budget_bucket = 'savings'`
+    )
+    .get();
+  return row.total;
+}
+
+app.get('/api/savings/summary', requireAuth, (req, res) => {
+  const totalSaved = totalSavedAllTime();
+  const allocations = db.prepare('SELECT * FROM savings_allocations ORDER BY sort_order, id').all();
+  const allocated = allocations.reduce((s, a) => s + a.amount, 0);
+  res.json({ totalSaved, allocations, allocated, unallocated: totalSaved - allocated });
+});
+
+app.post('/api/savings/allocations', requireAuth, (req, res) => {
+  const { name, amount } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
+  const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM savings_allocations').get().m;
+  const info = db
+    .prepare('INSERT INTO savings_allocations (name, amount, sort_order) VALUES (?, ?, ?)')
+    .run(name.trim(), amount || 0, maxOrder + 1);
+  res.json({ id: info.lastInsertRowid });
+});
+
+app.patch('/api/savings/allocations/:id', requireAuth, (req, res) => {
+  const { amount, name } = req.body;
+  if (amount !== undefined) db.prepare('UPDATE savings_allocations SET amount = ? WHERE id = ?').run(amount, req.params.id);
+  if (name !== undefined) db.prepare('UPDATE savings_allocations SET name = ? WHERE id = ?').run(name, req.params.id);
+  res.json({ ok: true });
+});
+
+app.delete('/api/savings/allocations/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM savings_allocations WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.get('/api/networth', requireAuth, (req, res) => {
+  const totalSaved = totalSavedAllTime();
+
+  const dedicatedRow = db
+    .prepare('SELECT actual FROM dedicated_account_balances WHERE actual IS NOT NULL ORDER BY year DESC, month DESC LIMIT 1')
+    .get();
+  const dedicatedActual = dedicatedRow ? dedicatedRow.actual : 0;
+
+  const debts = db.prepare('SELECT id, name FROM debts').all();
+  let totalDebt = 0;
+  debts.forEach((d) => {
+    const latest = db
+      .prepare('SELECT balance FROM debt_balances WHERE debt_id = ? ORDER BY year DESC, month DESC LIMIT 1')
+      .get(d.id);
+    if (latest) totalDebt += latest.balance;
+  });
+
+  const totalAssets = totalSaved + dedicatedActual;
+  res.json({
+    totalSaved,
+    dedicatedActual,
+    totalAssets,
+    totalDebt,
+    netWorth: totalAssets - totalDebt
+  });
+});
+
+// ---------- Yearly review ----------
+app.get('/api/yearly/:year', requireAuth, (req, res) => {
+  const { year } = req.params;
+
+  const monthRows = db.prepare('SELECT DISTINCT month FROM entries WHERE year = ?').all(year);
+  const monthsTracked = monthRows.length;
+
+  const catTotals = db
+    .prepare(
+      `SELECT c.name, c.kind, c.budget_bucket, SUM(e.amount) AS total
+       FROM entries e JOIN categories c ON c.id = e.category_id
+       WHERE e.year = ?
+       GROUP BY c.name, c.kind, c.budget_bucket
+       ORDER BY total DESC`
+    )
+    .all(year);
+
+  let income = 0;
+  let expense = 0;
+  const bucketTotals = { needs: 0, wants: 0, savings: 0 };
+  const topExpenseCategories = [];
+  catTotals.forEach((r) => {
+    if (r.kind === 'income') {
+      income += r.total;
+    } else {
+      expense += r.total;
+      topExpenseCategories.push({ category: r.name, total: r.total });
+      if (r.budget_bucket && bucketTotals.hasOwnProperty(r.budget_bucket)) {
+        bucketTotals[r.budget_bucket] += r.total;
+      }
+    }
+  });
+  const net = income - expense;
+
+  const monthlyRows = db
+    .prepare(
+      `SELECT e.month, c.kind, SUM(e.amount) AS total
+       FROM entries e JOIN categories c ON c.id = e.category_id
+       WHERE e.year = ?
+       GROUP BY e.month, c.kind`
+    )
+    .all(year);
+  const monthly = {};
+  monthlyRows.forEach((r) => {
+    if (!monthly[r.month]) monthly[r.month] = { month: r.month, income: 0, expense: 0 };
+    monthly[r.month][r.kind] = r.total;
+  });
+
+  res.json({
+    year: Number(year),
+    monthsTracked,
+    income,
+    expense,
+    net,
+    savingsRate: income > 0 ? ((net + bucketTotals.savings) / income) * 100 : 0,
+    bucketTotals,
+    topExpenseCategories: topExpenseCategories.sort((a, b) => b.total - a.total),
+    monthly: Object.values(monthly).sort((a, b) => a.month - b.month)
+  });
+});
+
+app.get('/api/yearly-list', requireAuth, (req, res) => {
+  const rows = db.prepare('SELECT DISTINCT year FROM entries ORDER BY year DESC').all();
+  res.json({ years: rows.map((r) => r.year) });
+});
+
+// ---------- Bills / subscriptions ----------
+function computeBillDueInfo(bill) {
+  if (!bill.last_charged_date) {
+    return { next_due_date: null, days_until: null };
+  }
+  const last = new Date(bill.last_charged_date + 'T00:00:00');
+  const next = new Date(last.getTime() + bill.cycle_days * 86400000);
+  const today = new Date(new Date().toDateString());
+  const days_until = Math.round((next.getTime() - today.getTime()) / 86400000);
+  return { next_due_date: next.toISOString().slice(0, 10), days_until };
+}
+
+app.get('/api/bills', requireAuth, (req, res) => {
+  const rows = db.prepare('SELECT * FROM bills ORDER BY sort_order, id').all();
+  const withDue = rows.map((b) => ({ ...b, ...computeBillDueInfo(b) }));
+  withDue.sort((a, b) => {
+    if (a.days_until === null) return 1;
+    if (b.days_until === null) return -1;
+    return a.days_until - b.days_until;
+  });
+  res.json({ bills: withDue });
+});
+
+app.post('/api/bills', requireAuth, (req, res) => {
+  const { name, amount, cycle_days, last_charged_date, note } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
+  const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM bills').get().m;
+  const info = db
+    .prepare('INSERT INTO bills (name, amount, cycle_days, last_charged_date, note, sort_order) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(name.trim(), amount || null, cycle_days || 30, last_charged_date || null, note || null, maxOrder + 1);
+  res.json({ id: info.lastInsertRowid });
+});
+
+app.patch('/api/bills/:id', requireAuth, (req, res) => {
+  const { name, amount, cycle_days, last_charged_date, note } = req.body;
+  const fields = [];
+  const values = [];
+  if (name !== undefined) { fields.push('name = ?'); values.push(name); }
+  if (amount !== undefined) { fields.push('amount = ?'); values.push(amount); }
+  if (cycle_days !== undefined) { fields.push('cycle_days = ?'); values.push(cycle_days); }
+  if (last_charged_date !== undefined) { fields.push('last_charged_date = ?'); values.push(last_charged_date); }
+  if (note !== undefined) { fields.push('note = ?'); values.push(note); }
+  if (fields.length === 0) return res.json({ ok: true });
+  values.push(req.params.id);
+  db.prepare(`UPDATE bills SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  res.json({ ok: true });
+});
+
+app.patch('/api/bills/:id/charged', requireAuth, (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  db.prepare('UPDATE bills SET last_charged_date = ? WHERE id = ?').run(today, req.params.id);
+  res.json({ ok: true, last_charged_date: today });
+});
+
+app.delete('/api/bills/:id', requireAuth, (req, res) => {
+  db.prepare('DELETE FROM bills WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
