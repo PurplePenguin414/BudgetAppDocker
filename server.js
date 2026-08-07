@@ -109,13 +109,24 @@ CREATE TABLE IF NOT EXISTS bills (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   amount REAL,
+  schedule_type TEXT NOT NULL DEFAULT 'cycle' CHECK(schedule_type IN ('cycle','fixed_day')),
   cycle_days INTEGER NOT NULL DEFAULT 30,
+  fixed_day INTEGER,
   last_charged_date TEXT,
   note TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 `);
+
+// ---------- Migration: add schedule_type/fixed_day to existing installs ----------
+const billCols = db.prepare("PRAGMA table_info(bills)").all().map((c) => c.name);
+if (!billCols.includes('schedule_type')) {
+  db.exec("ALTER TABLE bills ADD COLUMN schedule_type TEXT NOT NULL DEFAULT 'cycle'");
+}
+if (!billCols.includes('fixed_day')) {
+  db.exec('ALTER TABLE bills ADD COLUMN fixed_day INTEGER');
+}
 
 // ---------- Migration: add budget_bucket to existing installs ----------
 const existingCols = db.prepare("PRAGMA table_info(categories)").all().map((c) => c.name);
@@ -883,13 +894,30 @@ app.get('/api/yearly-list', requireAuth, (req, res) => {
 });
 
 // ---------- Bills / subscriptions ----------
+function clampDayToMonth(year, monthIndex, day) {
+  const lastDayOfMonth = new Date(year, monthIndex + 1, 0).getDate();
+  return Math.min(day, lastDayOfMonth);
+}
+
 function computeBillDueInfo(bill) {
+  const today = new Date(new Date().toDateString());
+
+  if (bill.schedule_type === 'fixed_day' && bill.fixed_day) {
+    const year = today.getFullYear();
+    const monthIndex = today.getMonth();
+    let candidate = new Date(year, monthIndex, clampDayToMonth(year, monthIndex, bill.fixed_day));
+    if (candidate < today) {
+      candidate = new Date(year, monthIndex + 1, clampDayToMonth(year, monthIndex + 1, bill.fixed_day));
+    }
+    const days_until = Math.round((candidate.getTime() - today.getTime()) / 86400000);
+    return { next_due_date: candidate.toISOString().slice(0, 10), days_until };
+  }
+
   if (!bill.last_charged_date) {
     return { next_due_date: null, days_until: null };
   }
   const last = new Date(bill.last_charged_date + 'T00:00:00');
   const next = new Date(last.getTime() + bill.cycle_days * 86400000);
-  const today = new Date(new Date().toDateString());
   const days_until = Math.round((next.getTime() - today.getTime()) / 86400000);
   return { next_due_date: next.toISOString().slice(0, 10), days_until };
 }
@@ -906,22 +934,25 @@ app.get('/api/bills', requireAuth, (req, res) => {
 });
 
 app.post('/api/bills', requireAuth, (req, res) => {
-  const { name, amount, cycle_days, last_charged_date, note } = req.body;
+  const { name, amount, schedule_type, cycle_days, fixed_day, last_charged_date, note } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
+  const useType = schedule_type === 'fixed_day' ? 'fixed_day' : 'cycle';
   const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM bills').get().m;
   const info = db
-    .prepare('INSERT INTO bills (name, amount, cycle_days, last_charged_date, note, sort_order) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(name.trim(), amount || null, cycle_days || 30, last_charged_date || null, note || null, maxOrder + 1);
+    .prepare('INSERT INTO bills (name, amount, schedule_type, cycle_days, fixed_day, last_charged_date, note, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(name.trim(), amount || null, useType, cycle_days || 30, fixed_day || null, last_charged_date || null, note || null, maxOrder + 1);
   res.json({ id: info.lastInsertRowid });
 });
 
 app.patch('/api/bills/:id', requireAuth, (req, res) => {
-  const { name, amount, cycle_days, last_charged_date, note } = req.body;
+  const { name, amount, schedule_type, cycle_days, fixed_day, last_charged_date, note } = req.body;
   const fields = [];
   const values = [];
   if (name !== undefined) { fields.push('name = ?'); values.push(name); }
   if (amount !== undefined) { fields.push('amount = ?'); values.push(amount); }
+  if (schedule_type !== undefined) { fields.push('schedule_type = ?'); values.push(schedule_type); }
   if (cycle_days !== undefined) { fields.push('cycle_days = ?'); values.push(cycle_days); }
+  if (fixed_day !== undefined) { fields.push('fixed_day = ?'); values.push(fixed_day); }
   if (last_charged_date !== undefined) { fields.push('last_charged_date = ?'); values.push(last_charged_date); }
   if (note !== undefined) { fields.push('note = ?'); values.push(note); }
   if (fields.length === 0) return res.json({ ok: true });
