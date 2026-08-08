@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS bills (
   cycle_days INTEGER NOT NULL DEFAULT 30,
   fixed_day INTEGER,
   last_charged_date TEXT,
+  category TEXT,
   note TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -126,6 +127,9 @@ if (!billCols.includes('schedule_type')) {
 }
 if (!billCols.includes('fixed_day')) {
   db.exec('ALTER TABLE bills ADD COLUMN fixed_day INTEGER');
+}
+if (!billCols.includes('category')) {
+  db.exec('ALTER TABLE bills ADD COLUMN category TEXT');
 }
 
 // ---------- Migration: add budget_bucket to existing installs ----------
@@ -934,18 +938,18 @@ app.get('/api/bills', requireAuth, (req, res) => {
 });
 
 app.post('/api/bills', requireAuth, (req, res) => {
-  const { name, amount, schedule_type, cycle_days, fixed_day, last_charged_date, note } = req.body;
+  const { name, amount, schedule_type, cycle_days, fixed_day, last_charged_date, category, note } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'name required' });
   const useType = schedule_type === 'fixed_day' ? 'fixed_day' : 'cycle';
   const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM bills').get().m;
   const info = db
-    .prepare('INSERT INTO bills (name, amount, schedule_type, cycle_days, fixed_day, last_charged_date, note, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(name.trim(), amount || null, useType, cycle_days || 30, fixed_day || null, last_charged_date || null, note || null, maxOrder + 1);
+    .prepare('INSERT INTO bills (name, amount, schedule_type, cycle_days, fixed_day, last_charged_date, category, note, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(name.trim(), amount || null, useType, cycle_days || 30, fixed_day || null, last_charged_date || null, category || null, note || null, maxOrder + 1);
   res.json({ id: info.lastInsertRowid });
 });
 
 app.patch('/api/bills/:id', requireAuth, (req, res) => {
-  const { name, amount, schedule_type, cycle_days, fixed_day, last_charged_date, note } = req.body;
+  const { name, amount, schedule_type, cycle_days, fixed_day, last_charged_date, category, note } = req.body;
   const fields = [];
   const values = [];
   if (name !== undefined) { fields.push('name = ?'); values.push(name); }
@@ -954,6 +958,7 @@ app.patch('/api/bills/:id', requireAuth, (req, res) => {
   if (cycle_days !== undefined) { fields.push('cycle_days = ?'); values.push(cycle_days); }
   if (fixed_day !== undefined) { fields.push('fixed_day = ?'); values.push(fixed_day); }
   if (last_charged_date !== undefined) { fields.push('last_charged_date = ?'); values.push(last_charged_date); }
+  if (category !== undefined) { fields.push('category = ?'); values.push(category); }
   if (note !== undefined) { fields.push('note = ?'); values.push(note); }
   if (fields.length === 0) return res.json({ ok: true });
   values.push(req.params.id);
