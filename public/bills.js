@@ -121,7 +121,7 @@ function renderBills(bills) {
   container.innerHTML = groupKeys
     .map((key) => {
       const groupBills = groups.get(key);
-      const subtotal = groupBills.reduce((s, b) => s + (b.amount || 0), 0);
+      const subtotal = groupBills.reduce((s, b) => s + (b.amount ? annualizedAmount(b) : 0), 0);
       const rowsHtml = groupBills
         .map((b) => {
           const status = statusInfo(b.days_until);
@@ -149,7 +149,7 @@ function renderBills(bills) {
     <div class="bill-group">
       <div class="bill-group-header">
         <span>${key}</span>
-        <span class="bill-group-subtotal">${fmt(subtotal)}</span>
+        <span class="bill-group-subtotal">${fmt(subtotal)}/yr</span>
       </div>
       ${rowsHtml}
     </div>`;
