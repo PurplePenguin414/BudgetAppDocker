@@ -255,7 +255,7 @@ document.getElementById('add-deposit-link').addEventListener('click', async () =
   if (!amountStr) return;
   const amount = parseFloat(amountStr);
   if (isNaN(amount) || amount <= 0) return;
-  const note = prompt('Note (optional, e.g. "BeyondFinance monthly draft"):') || '';
+  const note = prompt('Note (optional, e.g. "Monthly settlement account draft"):') || '';
   await fetch('/api/dedicated/deposit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -145,10 +145,9 @@ if (catCount === 0) {
     'INSERT INTO categories (kind, name, is_default, sort_order, budget_bucket) VALUES (?, ?, 1, ?, ?)'
   );
   const incomeDefaults = [
-    'Taz Networks',
-    'NextWave Technologies',
-    'Rover',
-    'The Book Bridge Organization',
+    'Primary Job',
+    'Side Business',
+    'Freelance / Gig Work',
     'Other'
   ];
   // [name, bucket] — bucket is null for categories excluded from 50/30/20 (e.g. business costs)
@@ -176,39 +175,9 @@ if (catCount === 0) {
   seed();
 }
 
-// ---------- Seed default debts (only if table is empty) ----------
-const debtCount = db.prepare('SELECT COUNT(*) AS c FROM debts').get().c;
-if (debtCount === 0) {
-  const insertDebt = db.prepare(
-    'INSERT INTO debts (name, is_default, sort_order) VALUES (?, 1, ?)'
-  );
-  const debtDefaults = ['Discover', 'PNC Bank', 'Citi Bank', 'Capital One'];
-  const seedDebts = db.transaction(() => {
-    debtDefaults.forEach((name, i) => insertDebt.run(name, i));
-  });
-  seedDebts();
-}
-
-// ---------- Migration: rename old debt labels, add Citi Bank for pre-existing installs ----------
-const debtRenames = {
-  'PNC (BeyondFinance)': 'PNC Bank',
-  'Discover (BeyondFinance)': 'Discover'
-};
-const renameDebt = db.prepare('UPDATE debts SET name = ? WHERE name = ?');
-const debtRenameMigration = db.transaction(() => {
-  Object.entries(debtRenames).forEach(([oldName, newName]) => {
-    const exists = db.prepare('SELECT id FROM debts WHERE name = ?').get(oldName);
-    const newExists = db.prepare('SELECT id FROM debts WHERE name = ?').get(newName);
-    if (exists && !newExists) renameDebt.run(newName, oldName);
-  });
-});
-debtRenameMigration();
-
-const hasCitiBank = db.prepare("SELECT id FROM debts WHERE name = 'Citi Bank'").get();
-if (!hasCitiBank) {
-  const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM debts').get().m;
-  db.prepare('INSERT INTO debts (name, is_default, sort_order) VALUES (?, 1, ?)').run('Citi Bank', maxOrder + 1);
-}
+// ---------- Debts table starts empty ----------
+// Debts are personal, so there's no sensible default list — add your own from the Debt page
+// using the "+ add another debt" link.
 
 // ---------- Migration: assign buckets / add Savings category for pre-existing installs ----------
 const bucketDefaults = {
@@ -538,10 +507,10 @@ app.get('/api/debts/trend', requireAuth, (req, res) => {
   });
 });
 
-// ---------- Dedicated account (BeyondFinance settlement fund) ----------
+// ---------- Dedicated account (e.g. a debt settlement escrow account) ----------
 // "Expected" balance is auto-calculated: cumulative deposits minus cumulative withdrawals,
-// up through and including the selected month. "Actual" is what Megan manually logs each month
-// after checking the real account, so she can see if they've drifted apart.
+// up through and including the selected month. "Actual" is what you manually log each month
+// after checking the real account, so you can see if they've drifted apart.
 
 function cumulativeThrough(table, year, month) {
   const row = db

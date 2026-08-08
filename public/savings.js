@@ -92,7 +92,7 @@ function renderAllocations(allocations, unallocated) {
 }
 
 document.getElementById('add-alloc-link').addEventListener('click', async () => {
-  const name = prompt('What is this money for? (e.g. "Murphy\'s surgery fund")');
+  const name = prompt('What is this money for? (e.g. "Emergency fund", "Car repair fund")');
   if (!name || !name.trim()) return;
   const amountStr = prompt('How much of your saved money to dedicate to this ($)?');
   if (!amountStr) return;
