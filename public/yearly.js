@@ -35,7 +35,8 @@ async function load() {
   document.getElementById('empty-state').style.display = 'none';
   document.getElementById('content').style.display = 'block';
   document.getElementById('y-months-label').textContent =
-    `${data.monthsTracked} month${data.monthsTracked === 1 ? '' : 's'} logged this year`;
+    `${data.monthsTracked} month${data.monthsTracked === 1 ? '' : 's'} logged this year` +
+    (data.excludedCurrentMonth ? ' (current month excluded)' : '');
 
   document.getElementById('y-income').textContent = fmt(data.income);
   document.getElementById('y-expense').textContent = fmt(data.expense);
