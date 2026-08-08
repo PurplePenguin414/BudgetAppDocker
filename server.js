@@ -835,18 +835,28 @@ app.get('/api/networth', requireAuth, (req, res) => {
 app.get('/api/yearly/:year', requireAuth, (req, res) => {
   const { year } = req.params;
 
-  const monthRows = db.prepare('SELECT DISTINCT month FROM entries WHERE year = ?').all(year);
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth() + 1;
+  const excludeCurrentMonth = Number(year) === curYear;
+  // If viewing the current year, exclude the in-progress current month so it doesn't skew the totals.
+  const monthFilter = excludeCurrentMonth ? 'e.year = ? AND e.month != ?' : 'e.year = ?';
+  const monthFilterParams = excludeCurrentMonth ? [year, curMonth] : [year];
+
+  const monthRows = excludeCurrentMonth
+    ? db.prepare('SELECT DISTINCT month FROM entries WHERE year = ? AND month != ?').all(year, curMonth)
+    : db.prepare('SELECT DISTINCT month FROM entries WHERE year = ?').all(year);
   const monthsTracked = monthRows.length;
 
   const catTotals = db
     .prepare(
       `SELECT c.name, c.kind, c.budget_bucket, SUM(e.amount) AS total
        FROM entries e JOIN categories c ON c.id = e.category_id
-       WHERE e.year = ?
+       WHERE ${monthFilter}
        GROUP BY c.name, c.kind, c.budget_bucket
        ORDER BY total DESC`
     )
-    .all(year);
+    .all(...monthFilterParams);
 
   let income = 0;
   let expense = 0;
@@ -869,10 +879,10 @@ app.get('/api/yearly/:year', requireAuth, (req, res) => {
     .prepare(
       `SELECT e.month, c.kind, SUM(e.amount) AS total
        FROM entries e JOIN categories c ON c.id = e.category_id
-       WHERE e.year = ?
+       WHERE ${monthFilter}
        GROUP BY e.month, c.kind`
     )
-    .all(year);
+    .all(...monthFilterParams);
   const monthly = {};
   monthlyRows.forEach((r) => {
     if (!monthly[r.month]) monthly[r.month] = { month: r.month, income: 0, expense: 0 };
@@ -882,6 +892,7 @@ app.get('/api/yearly/:year', requireAuth, (req, res) => {
   res.json({
     year: Number(year),
     monthsTracked,
+    excludedCurrentMonth: excludeCurrentMonth,
     income,
     expense,
     net,
