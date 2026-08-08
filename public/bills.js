@@ -35,13 +35,18 @@ async function loadBills() {
 
 function renderSummary(bills) {
   const withAmount = bills.filter((b) => b.amount !== null && b.amount !== undefined);
-  const total = withAmount.reduce((s, b) => s + b.amount, 0);
+
+  const totalAnnual = withAmount.reduce((s, b) => {
+    if (b.schedule_type === 'fixed_day') return s + b.amount * 12; // fixed-day bills are monthly
+    return s + b.amount * (365 / (b.cycle_days || 30));
+  }, 0);
+
   const avgMonthly = withAmount.reduce((s, b) => {
     if (b.schedule_type === 'fixed_day') return s + b.amount; // fixed-day bills are already monthly
     return s + b.amount * (30 / (b.cycle_days || 30));
   }, 0);
 
-  document.getElementById('b-total').textContent = fmt(total);
+  document.getElementById('b-total').textContent = fmt(totalAnnual);
   document.getElementById('b-avg-monthly').textContent = fmt(avgMonthly);
 }
 
