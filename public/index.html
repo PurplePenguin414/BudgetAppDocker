@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <title>Budget Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -34,7 +38,7 @@
   #login-screen { max-width: 340px; margin: 120px auto; }
   #login-screen h1 { font-size: 20px; margin-bottom: 18px; text-align: center; }
   #login-screen input { width: 100%; padding: 11px 13px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; margin-bottom: 10px; background: var(--surface); }
-  #login-screen button { width: 100%; padding: 11px; border: none; border-radius: 8px; background: var(--text); color: #fff; font-size: 14px; font-family: inherit; cursor: pointer; }
+  #login-screen button { width: 100%; padding: 11px; border: none; border-radius: 8px; background: var(--blue); color: #fff; font-size: 14px; font-family: inherit; cursor: pointer; }
   #login-error { color: var(--red); font-size: 12.5px; margin-top: 8px; min-height: 16px; }
 
   /* ---------- Header ---------- */
@@ -76,10 +80,10 @@
   .entry-form select { flex: 1.4; min-width: 150px; }
   .entry-form input[type=number] { width: 100px; }
   .entry-form input[type=text] { flex: 1; min-width: 120px; }
-  .entry-form button { padding: 9px 16px; border: none; border-radius: 7px; background: var(--text); color: #fff; font-size: 13px; font-family: inherit; cursor: pointer; white-space: nowrap; }
+  .entry-form button { padding: 9px 16px; border: none; border-radius: 7px; background: var(--blue); color: #fff; font-size: 13px; font-family: inherit; cursor: pointer; white-space: nowrap; }
   .toggle-row { display: flex; gap: 6px; margin-bottom: 10px; }
   .toggle-btn { padding: 6px 12px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); font-size: 12.5px; font-family: inherit; cursor: pointer; color: var(--muted); }
-  .toggle-btn.active { background: var(--text); color: #fff; border-color: var(--text); }
+  .toggle-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
   .add-cat-link { font-size: 11.5px; color: var(--muted); font-family: 'DM Mono', monospace; cursor: pointer; margin-top: 8px; display: inline-block; text-decoration: underline; }
 
   /* ---------- Entries list ---------- */
@@ -152,7 +156,7 @@
 
   <div class="header">
     <div>
-      <h1>Budget Dashboard</h1>
+      <h1>Megan's Budget Dashboard</h1>
       <p>Monthly income &amp; spending — tracked over time</p>
     </div>
     <div>
