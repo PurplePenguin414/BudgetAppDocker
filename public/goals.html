@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<title>Goals — Budget Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css?v=20260819c">
+<style>
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --surface2: #efede7;
+    --border: rgba(0,0,0,0.09);
+    --text: #1a1917;
+    --muted: #7a7870;
+    --red: #c94235;
+    --amber: #b87318;
+    --green: #2a8a5f;
+    --blue: #2761a0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); padding: 36px 24px 80px; max-width: 920px; margin: 0 auto; }
+  h1 { font-weight: 500; font-size: 22px; letter-spacing: -0.4px; }
+
+  .header { margin-bottom: 20px; }
+  .header p { font-size: 12px; color: var(--muted); margin-top: 4px; font-family: 'DM Mono', monospace; }
+
+  .section-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); margin-bottom: 11px; margin-top: 32px; }
+  .section-label:first-of-type { margin-top: 0; }
+
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .metric { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 15px 16px; }
+  .metric-label { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; letter-spacing: 0.03em; margin-bottom: 7px; }
+  .metric-value { font-size: 22px; font-weight: 500; letter-spacing: -0.5px; }
+  .v-green { color: var(--green); } .v-red { color: var(--red); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; }
+  .empty-msg { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+  .empty-msg a { color: var(--blue); }
+
+  .goal-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .goal-row:last-child { border-bottom: none; }
+  .goal-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+  .goal-name { font-size: 14px; font-weight: 500; }
+  .goal-target { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .goal-track { background: var(--surface2); border-radius: 3px; height: 8px; overflow: hidden; }
+  .goal-fill { height: 8px; border-radius: 3px; }
+  .goal-meta { display: flex; justify-content: space-between; margin-top: 5px; font-size: 11.5px; font-family: 'DM Mono', monospace; color: var(--muted); }
+
+  .debt-goal-card { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .debt-goal-card:last-child { border-bottom: none; }
+  .debt-goal-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .debt-goal-name { font-size: 14px; font-weight: 500; }
+  .status-badge { font-size: 10.5px; font-family: 'DM Mono', monospace; padding: 4px 9px; border-radius: 6px; white-space: nowrap; }
+  .status-on_track { background: #edf7f1; color: var(--green); }
+  .status-behind { background: #fdf0ee; color: var(--red); }
+  .status-paid_off { background: #edf7f1; color: var(--green); }
+  .status-no_data { background: var(--surface2); color: var(--muted); }
+  .debt-goal-detail { font-size: 11.5px; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+  @media (max-width: 620px) {
+    .metrics { grid-template-columns: repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div id="topnav-mount"></div>
+
+  <div class="header">
+    <h1>Goals</h1>
+    <p>The bigger picture — set targets on the Savings, Retirement, and Debt tabs, see them all here</p>
+  </div>
+
+  <div class="section-label">Net worth</div>
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">total saved</div><div class="metric-value v-green" id="g-saved">$0</div></div>
+    <div class="metric"><div class="metric-label">dedicated account</div><div class="metric-value" id="g-dedicated">$0</div></div>
+    <div class="metric"><div class="metric-label">total debt</div><div class="metric-value" id="g-debt">$0</div></div>
+    <div class="metric"><div class="metric-label">net worth</div><div class="metric-value" id="g-networth">$0</div></div>
+  </div>
+
+  <div class="section-label">Savings goals</div>
+  <div class="card" id="savings-goals-card"></div>
+
+  <div class="section-label">Retirement contribution goals</div>
+  <p style="font-size: 11.5px; color: var(--muted); margin-bottom: 10px;">This year's contributions (you + employer) vs. your goal.</p>
+  <div class="card" id="retirement-goals-card"></div>
+
+  <div class="section-label">Debt payoff goals</div>
+  <p style="font-size: 11.5px; color: var(--muted); margin-bottom: 10px;">Projected payoff date is based on your average monthly paydown pace.</p>
+  <div class="card" id="debt-goals-card"></div>
+
+<script src="nav.js?v=20260819d"></script>
+<script src="goals.js?v=20260819a"></script>
+</body>
+</html>

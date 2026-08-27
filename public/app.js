@@ -227,6 +227,7 @@ function renderExpensePie(sorted) {
   }
   const total = sorted.reduce((s, [, amt]) => s + amt, 0);
   const ctx = canvas.getContext('2d');
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   if (state.pieChart) state.pieChart.destroy();
   state.pieChart = new Chart(ctx, {
     type: 'pie',
@@ -234,13 +235,15 @@ function renderExpensePie(sorted) {
       labels: sorted.map(([name, amt]) => `${name} (${((amt / total) * 100).toFixed(0)}%)`),
       datasets: [{
         data: sorted.map(([, amt]) => amt),
-        backgroundColor: sorted.map((_, i) => PIE_COLORS[i % PIE_COLORS.length])
+        backgroundColor: sorted.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]),
+        borderColor: '#000000',
+        borderWidth: 1
       }]
     },
     options: {
       responsive: true,
       plugins: {
-        legend: { position: 'right', labels: { boxWidth: 12, font: { family: 'DM Sans', size: 11 } } },
+        legend: { position: 'right', labels: { boxWidth: 12, font: { family: 'DM Sans', size: 11 }, color: isDark ? '#ffffff' : undefined } },
         tooltip: {
           callbacks: {
             label: (ctx) => `${ctx.label.split(' (')[0]}: ${fmt(ctx.raw)} (${((ctx.raw / total) * 100).toFixed(0)}%)`
@@ -389,24 +392,32 @@ async function renderTargets(entries) {
 
   let totalTarget = 0;
   let totalActual = 0;
+  let totalTargetNonSavings = 0;
+  let totalActualNonSavings = 0;
   data.targets.forEach((t) => {
     if (t.amount) totalTarget += t.amount;
     totalActual += actuals[t.category_id] || 0;
+    if (t.budget_bucket !== 'savings') {
+      if (t.amount) totalTargetNonSavings += t.amount;
+      totalActualNonSavings += actuals[t.category_id] || 0;
+    }
   });
-  const totalOver = totalTarget > 0 && totalActual > totalTarget;
+  const totalOver = totalTargetNonSavings > 0 && totalActualNonSavings > totalTargetNonSavings;
 
   const rowsHtml = data.targets
     .map((t) => {
       const actual = actuals[t.category_id] || 0;
       const target = t.amount;
       const pct = target ? Math.min((actual / target) * 100, 100) : 0;
-      const over = target && actual > target;
-      const color = !target ? 'var(--surface2)' : over ? 'var(--red)' : 'var(--blue)';
+      const isSavings = t.budget_bucket === 'savings';
+      const over = target && actual > target && !isSavings;
+      const exceededSavings = target && actual > target && isSavings;
+      const color = !target ? 'var(--surface2)' : over ? 'var(--red)' : exceededSavings ? 'var(--green)' : 'var(--blue)';
       return `
       <div class="target-row">
         <div class="target-name">${t.category_name}</div>
         <div class="target-track"><div class="target-fill" style="width:${pct}%;background:${color}"></div></div>
-        <div class="target-actual" style="color:${over ? 'var(--red)' : 'var(--text)'}">${fmt(actual)}</div>
+        <div class="target-actual" style="color:${over ? 'var(--red)' : exceededSavings ? 'var(--green)' : 'var(--text)'}">${fmt(actual)}</div>
         <div class="target-input-wrap">
           <span>of $</span>
           <input type="number" step="0.01" min="0" data-category-id="${t.category_id}" value="${target !== null ? target : ''}" placeholder="—" />
@@ -450,14 +461,17 @@ async function renderMomTable(currentEntries) {
   const prevData = await res.json();
 
   const curTotals = {};
+  const bucketByName = {};
   currentEntries.forEach((e) => {
     const key = e.category_name + '|' + e.kind;
     curTotals[key] = (curTotals[key] || 0) + e.amount;
+    if (e.budget_bucket) bucketByName[e.category_name] = e.budget_bucket;
   });
   const prevTotals = {};
   prevData.entries.forEach((e) => {
     const key = e.category_name + '|' + e.kind;
     prevTotals[key] = (prevTotals[key] || 0) + e.amount;
+    if (e.budget_bucket) bucketByName[e.category_name] = e.budget_bucket;
   });
 
   const allKeys = Array.from(new Set([...Object.keys(curTotals), ...Object.keys(prevTotals)]));
@@ -476,7 +490,9 @@ async function renderMomTable(currentEntries) {
       if (prev > 0) {
         const pct = ((cur - prev) / prev) * 100;
         changeLabel = (pct >= 0 ? '+' : '') + pct.toFixed(0) + '%';
-        const improved = kind === 'income' ? pct >= 0 : pct <= 0;
+        // Income and Savings/Investing both work like income here — more is the good direction.
+        const actsLikeIncome = kind === 'income' || bucketByName[name] === 'savings';
+        const improved = actsLikeIncome ? pct >= 0 : pct <= 0;
         color = pct === 0 ? 'var(--muted)' : improved ? 'var(--green)' : 'var(--red)';
       } else if (cur > 0) {
         changeLabel = 'new';

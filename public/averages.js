@@ -152,6 +152,7 @@ function renderExpensePie(expense) {
   }
   const total = sorted.reduce((s, e) => s + e.avg, 0);
   const ctx = canvas.getContext('2d');
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
   if (pieChart) pieChart.destroy();
   pieChart = new Chart(ctx, {
     type: 'pie',
@@ -159,13 +160,15 @@ function renderExpensePie(expense) {
       labels: sorted.map((e) => `${e.category} (${((e.avg / total) * 100).toFixed(0)}%)`),
       datasets: [{
         data: sorted.map((e) => e.avg),
-        backgroundColor: sorted.map((_, i) => PIE_COLORS[i % PIE_COLORS.length])
+        backgroundColor: sorted.map((_, i) => PIE_COLORS[i % PIE_COLORS.length]),
+        borderColor: '#000000',
+        borderWidth: 1
       }]
     },
     options: {
       responsive: true,
       plugins: {
-        legend: { position: 'right', labels: { boxWidth: 12, font: { family: 'DM Sans', size: 11 } } },
+        legend: { position: 'right', labels: { boxWidth: 12, font: { family: 'DM Sans', size: 11 }, color: isDark ? '#ffffff' : undefined } },
         tooltip: {
           callbacks: {
             label: (ctx) => `${ctx.label.split(' (')[0]}: ${fmt(ctx.raw)} (${((ctx.raw / total) * 100).toFixed(0)}%)`

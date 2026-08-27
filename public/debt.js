@@ -72,18 +72,34 @@ function renderDebtList(debts) {
   container.innerHTML = debts
     .map(
       (d) => `
-    <div class="debt-row">
-      <div class="debt-name">${d.name}</div>
-      <div class="debt-input-wrap">
-        <span>$</span>
-        <input type="number" step="0.01" min="0" data-debt-id="${d.debt_id}" value="${d.balance !== null ? d.balance : ''}" placeholder="balance" />
-        <span class="save-hint" id="hint-${d.debt_id}">saved</span>
+    <div class="debt-row-wrap">
+      <div class="debt-row">
+        <div class="debt-name">${d.name}</div>
+        <div class="debt-input-wrap">
+          <span>$</span>
+          <input type="number" step="0.01" min="0" data-debt-id="${d.debt_id}" value="${d.balance !== null ? d.balance : ''}" placeholder="balance" />
+          <span class="save-hint" id="hint-${d.debt_id}">saved</span>
+        </div>
+      </div>
+      <div class="debt-goal-row">
+        <span>debt-free by:</span>
+        <input type="date" data-goal-debt-id="${d.debt_id}" value="${d.target_payoff_date || ''}" />
       </div>
     </div>`
     )
     .join('');
 
-  container.querySelectorAll('input').forEach((input) => {
+  container.querySelectorAll('[data-goal-debt-id]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      await fetch(`/api/debts/${input.dataset.goalDebtId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_payoff_date: input.value || null })
+      });
+    });
+  });
+
+  container.querySelectorAll('.debt-input-wrap input').forEach((input) => {
     input.addEventListener('change', async () => {
       const balance = parseFloat(input.value);
       if (isNaN(balance) || balance < 0) return;

@@ -1,11 +1,18 @@
 .topnav {
   display: flex;
-  gap: 6px;
-  overflow-x: auto;
+  align-items: center;
+  gap: 8px;
   padding-bottom: 14px;
   margin-bottom: 24px;
   border-bottom: 1px solid var(--border);
-  -webkit-overflow-scrolling: touch;
+}
+.topnav-scroll {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  overflow: visible;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .topnav-item {
   display: flex;
@@ -23,5 +30,50 @@
   background: var(--surface);
 }
 .topnav-item:hover { background: var(--surface2); }
-.topnav-item.active { background: var(--text); color: #fff; border-color: var(--text); }
+.topnav-item.active { background: var(--blue); color: #fff; border-color: var(--blue); }
 .topnav-icon { font-size: 14px; }
+.topnav-theme-toggle { flex-shrink: 0; cursor: pointer; font-family: 'DM Mono', monospace; font-size: 12px; }
+
+.topnav-dropdown-wrap { position: relative; flex-shrink: 0; }
+.topnav-dropdown-btn { cursor: pointer; }
+.topnav-caret { font-size: 8px; margin-left: 1px; opacity: 0.7; }
+.topnav-dropdown-menu {
+  display: none;
+  flex-direction: column;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 150px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px;
+  gap: 2px;
+  z-index: 100;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+}
+.topnav-dropdown-menu.open { display: flex; }
+.topnav-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.topnav-dropdown-item:hover { background: var(--surface2); }
+.topnav-dropdown-item.active { background: var(--blue); color: #fff; }
+
+/* Every page defines input/select/textarea backgrounds but not text color,
+   so browsers fall back to black text — invisible against a dark background. */
+input, select, textarea {
+  color: var(--text);
+}
+input::placeholder, textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}

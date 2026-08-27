@@ -10,7 +10,7 @@
 <title>Savings & Net Worth — Budget Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="shared.css">
+<link rel="stylesheet" href="shared.css?v=20260819c">
 <style>
   :root {
     --bg: #f7f6f2;
@@ -43,8 +43,12 @@
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; }
   .empty-msg { color: var(--muted); font-size: 13px; padding: 6px 2px; }
 
-  .alloc-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
-  .alloc-row:last-child { border-bottom: none; }
+  .alloc-row-wrap { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .alloc-row-wrap:last-child { border-bottom: none; }
+  .alloc-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .goal-track { background: var(--surface2); border-radius: 3px; height: 7px; overflow: hidden; margin-top: 8px; }
+  .goal-fill { height: 7px; border-radius: 3px; }
+  .goal-progress-label { font-size: 11.5px; color: var(--muted); font-family: 'DM Mono', monospace; margin-top: 5px; }
   .alloc-name { flex: 1; font-size: 14px; }
   .alloc-input-wrap { display: flex; align-items: center; gap: 4px; }
   .alloc-input-wrap span { color: var(--muted); font-size: 13px; }
@@ -57,6 +61,22 @@
   .add-cat-link { font-size: 11.5px; color: var(--muted); font-family: 'DM Mono', monospace; cursor: pointer; margin-top: 12px; display: inline-block; text-decoration: underline; }
 
   .unalloc-row { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; margin-top: 4px; border-top: 1.5px solid var(--border); font-weight: 600; font-size: 14px; }
+
+  .wd-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .wd-row:last-child { border-bottom: none; }
+  .wd-date { font-family: 'DM Mono', monospace; color: var(--muted); font-size: 11.5px; margin-right: 8px; }
+  .wd-amt { font-family: 'DM Mono', monospace; font-weight: 500; }
+  .wd-note { color: var(--muted); font-size: 11.5px; margin-left: 6px; }
+  .wd-del { color: var(--muted); cursor: pointer; font-size: 12px; margin-left: 12px; background: none; border: none; }
+  .wd-del:hover { color: var(--red); }
+
+  .withdrawal-form-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .withdrawal-form-row select, .withdrawal-form-row input { padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; font-family: inherit; background: var(--surface); color: var(--text); }
+  .withdrawal-form-row select { flex: 1.2; min-width: 130px; }
+  .withdrawal-form-row input[type=number]#wf-year { width: 80px; }
+  .withdrawal-form-row input[type=number]#wf-amount { width: 110px; }
+  .withdrawal-form-row input[type=text] { flex: 1; min-width: 140px; }
+  .withdrawal-form-row button { padding: 9px 16px; border: none; border-radius: 7px; background: var(--blue); color: #fff; font-size: 13px; font-family: inherit; cursor: pointer; white-space: nowrap; }
 
   @media (max-width: 620px) {
     .metrics { grid-template-columns: repeat(2,1fr); }
@@ -93,7 +113,21 @@
   <div class="card" id="alloc-card"></div>
   <span class="add-cat-link" id="add-alloc-link">+ dedicate an amount</span>
 
-<script src="nav.js"></script>
-<script src="savings.js"></script>
+  <div class="section-label">Withdrawals</div>
+  <p style="font-size: 11.5px; color: var(--muted); margin-bottom: 10px;">Money taken out of savings — this reduces your total saved above.</p>
+  <div class="card" id="withdrawal-list"></div>
+
+  <div class="card" id="withdrawal-form" style="margin-top: 10px;">
+    <div class="withdrawal-form-row">
+      <select id="wf-month"></select>
+      <input type="number" id="wf-year" placeholder="year" />
+      <input type="number" step="0.01" min="0" id="wf-amount" placeholder="amount $" />
+      <input type="text" id="wf-note" placeholder="note (optional)" />
+      <button id="wf-submit">Log withdrawal</button>
+    </div>
+  </div>
+
+<script src="nav.js?v=20260819d"></script>
+<script src="savings.js?v=20260819c"></script>
 </body>
 </html>
