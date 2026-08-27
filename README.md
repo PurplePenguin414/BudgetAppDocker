@@ -69,7 +69,7 @@ in your own Docker container, with your data staying on your own server.
    inside a temporary Docker container, so you don't need Node installed
    locally:
    ```bash
-   docker run --rm -v $(pwd):/app -w /app node:20-slim sh -c "npm install --omit=dev && node hash-password.js 'yourpassword'"
+   docker run --rm -v ${PWD}:/app -w /app node:20-slim sh -c "npm install --omit=dev && node hash-password.js 'Test123!'"
    ```
    Copy the printed hash into `.env` as `APP_PASSWORD_HASH`.
 
